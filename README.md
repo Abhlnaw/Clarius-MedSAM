@@ -1,3 +1,12 @@
+# Clarius-MedSAM
+stuff for hoyt
+
+Clarius ultrasound annotation and texture refinement built on MedSAM.
+
+See [the Clarius workflow guide](clarius/README.md) for MATLAB export, interactive segmentation, and texture refinement.
+
+---
+
 # MedSAM
 This is the official repository for MedSAM: Segment Anything in Medical Images.
 
