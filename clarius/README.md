@@ -1,4 +1,6 @@
-# Clarius B-mode annotation
+# Clarius ultrasound additions: workflow guide
+
+This guide covers the MATLAB export, interactive annotation, and texture refinement added to the MedSAM codebase. See [the project README](../README.md) for a summary of the changes.
 
 1. In MATLAB, run `clarius/runme2_export.m` from this repository. It is a copy
    of your `runme2.m`; set its exam directory near the top as needed. The original
@@ -31,7 +33,7 @@ Physical measurements require verified acquisition geometry and scan conversion.
 The hardcoded depth/pitch values in the MATLAB viewer are not used for measurements.
 Per-frame display normalization means brightness statistics are not calibrated
 or directly comparable across frames. Standard deviation is intensity variation,
-not a texture classifier or an abnormality score.
+not an abnormality score. The optional texture step combines local intensity statistics for appearance grouping.
 
 MedSAM provides box-prompted proposals, not guaranteed ultrasound boundaries or
 lesion detection. Inspect every result; redraw a tighter box or undo an incorrect

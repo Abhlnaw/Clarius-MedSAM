@@ -1,137 +1,84 @@
 # Clarius-MedSAM
-stuff for hoyt
 
-Clarius ultrasound annotation and texture refinement built on MedSAM.
+Adaptations of [MedSAM](https://github.com/bowang-lab/MedSAM) for exploring and annotating Clarius ultrasound B-mode images. This README describes the Clarius-specific changes in this repository. The pretrained MedSAM model and architecture are unchanged.
 
-See [the Clarius workflow guide](clarius/README.md) for MATLAB export, interactive segmentation, and texture refinement.
+## Changes added for Clarius ultrasound
 
----
+### Clean B-mode export from MATLAB
 
-# MedSAM
-This is the official repository for MedSAM: Segment Anything in Medical Images.
+`clarius/runme2_export.m` adapts the existing MATLAB RF/IQ/envelope viewer. For RF frames, it exports the underlying log-compressed, envelope-derived B-mode image as a grayscale PNG, rather than capturing a screenshot of the plotted axes. Each frame is scaled using its own intensity range and receives a JSON file with source, frame, dimensions, timestamp, and intensity limits.
 
-Welcome to join our [mailing list](https://forms.gle/hk4Efp6uWnhjUHFP6) to get updates.
+This keeps axes, titles, and screen-resolution scaling out of the segmentation input. The original external `runme2.m` is unchanged.
 
+### Interactive segmentation of exported frames
 
-## News
+`MedSAM_Clarius.py` adds a Matplotlib viewer for a single image or a folder of frames:
 
-- 2025.04.07: Release [MedSAM2](https://github.com/bowang-lab/MedSAM2) for 3D and video segmentation.
-- 2025.02: Welcome to join CVPR 2025 Challenges: [Interactive](https://www.codabench.org/competitions/5263/) and [Text-guided](https://www.codabench.org/competitions/5651/) 3D Biomedical Image Segmentation
-- 2024.01.15: Welcome to join [CVPR 2024 Challenge: MedSAM on Laptop](https://www.codabench.org/competitions/1847/)
-- 2024.01.15: Release [LiteMedSAM](https://github.com/bowang-lab/MedSAM/blob/LiteMedSAM/README.md) and [3D Slicer Plugin](https://github.com/bowang-lab/MedSAMSlicer), 10x faster than MedSAM! 
+- Drag a bounding box to generate a MedSAM mask.
+- Draw multiple boxes to annotate separate regions.
+- Undo the last region and browse frames with Previous/Next.
+- Save separate masks, an overlay, and JSON measurements; navigation and closing also save.
+- Reload existing annotations when returning to a frame.
 
+Grayscale, RGB, and RGBA inputs are converted to three channels. `MedSAM_Inference.py` also handles RGBA and single-channel images so PNG alpha channels do not cause the encoder's channel-count error.
 
-## Installation
-1. Create a virtual environment `conda create -n medsam python=3.10 -y` and activate it `conda activate medsam`
-2. Install [Pytorch 2.0](https://pytorch.org/get-started/locally/)
-3. `git clone https://github.com/bowang-lab/MedSAM`
-4. Enter the MedSAM folder `cd MedSAM` and run `pip install -e .`
+### Texture refinement inside oversized masks
 
+`clarius_texture.py` analyzes texture only inside the latest MedSAM region. It calculates local mean brightness and standard deviation at two neighborhood sizes, standardizes the four resulting features, and uses deterministic k-means clustering to create up to three appearance groups.
 
-## Get Started
-Download the [model checkpoint](https://drive.google.com/drive/folders/1ETWmi4AiniJeWOt6HAsYgTjYv_fkgzoN?usp=drive_link) and place it at e.g., `work_dir/MedSAM/medsam_vit_b`
+Neighborhood sizes are automatic: the larger window is approximately one quarter of the selected region's occupied height and width, and the smaller window is half that size. Pixels outside the mask are excluded from the local statistics.
 
-We provide three ways to quickly test the model on your images
+Click **Split latest by texture**, then click a colored group to save it as a refined mask. The original MedSAM mask is retained. A selected group includes all its pixels, including disconnected patches. **Show MedSAM masks** returns to box drawing.
 
-1. Command line
+The current implementation uses local intensity statistics, not GLCM. Three groups is a configurable code default, not an anatomical assumption or an automatically estimated number of tissue types.
 
-```bash
-python MedSAM_Inference.py # segment the demo image
+## Run the Clarius workflow
+
+Use a Python environment with the MedSAM dependencies, including PyTorch, NumPy, SciPy, scikit-image, and Matplotlib, and obtain the MedSAM ViT-B checkpoint separately.
+
+1. Set the exam directory near the top of `clarius/runme2_export.m`.
+2. Run the MATLAB script to create the exam's `exported_images` folder. From PowerShell in this repository:
+
+   ```powershell
+   matlab -batch "run('clarius/runme2_export.m')"
+   ```
+
+3. Launch the viewer, substituting your exported frame directory:
+
+   ```powershell
+   python MedSAM_Clarius.py --checkpoint .\medsam_vit_b.pth --device cuda:0 -i "C:\path\to\exam\exported_images" --output .\clarius_annotations\exam04
+   ```
+
+   Use `--device cpu` without CUDA. The input may also be a single image. Use a separate output folder for each exam.
+
+4. Draw a tight box, review the mask, optionally split it by texture, and save. Turn off the Matplotlib zoom/pan tools before drawing or selecting a texture group.
+
+See [the detailed workflow and output format](clarius/README.md) for additional usage notes.
+
+## Saved outputs
+
+Each image produces:
+
+- **NPZ:** individual MedSAM masks, plus texture labels, feature maps, and selected refined masks when texture analysis has been run. Separate masks preserve overlaps.
+- **JSON:** source image, bounding boxes, region IDs, pixel areas, display brightness statistics, and texture settings.
+- **PNG:** the current overlay view.
+
+Generated annotations, raw RF data, exported images, and model checkpoints are excluded from new Git commits by `.gitignore`.
+
+## Current limits and checks
+
+The exports retain the RF sample/line grid without scan conversion. Measurements are in pixels; physical measurements need verified acquisition geometry. Per-frame normalization means brightness statistics are not calibrated across frames.
+
+Texture groups describe appearance, not anatomy or lesions. This workflow does not add automatic lesion detection, manual boundary painting, or tracking between frames. It can refine an oversized candidate mask but cannot recover tissue outside that mask.
+
+`tests/test_clarius_texture.py` checks mask isolation, automatic neighborhood sizing, and constant/empty-region behavior:
+
+```powershell
+python -m unittest discover -s tests -p test_clarius_texture.py
 ```
 
-Segment other images with the following flags
-```bash
--i input_img
--o output path
---box bounding box of the segmentation target
-```
+Syntax checks were completed during development. These runtime tests and the interactive workflow still require verification in an environment with the inference dependencies.
 
-2. Jupyter-notebook
+## Attribution
 
-We provide a step-by-step tutorial on [CoLab](https://colab.research.google.com/drive/19WNtRMbpsxeqimBlmJwtd1dzpaIvK2FZ?usp=sharing)
-
-You can also run it locally with `tutorial_quickstart.ipynb`.
-
-3. GUI
-
-Install `PyQt5` with [pip](https://pypi.org/project/PyQt5/): `pip install PyQt5 ` or [conda](https://anaconda.org/anaconda/pyqt): `conda install -c anaconda pyqt`
-
-```bash
-python gui.py
-```
-
-Load the image to the GUI and specify segmentation targets by drawing bounding boxes.
-
-
-
-https://github.com/bowang-lab/MedSAM/assets/19947331/a8d94b4d-0221-4d09-a43a-1251842487ee
-
-
-
-
-
-## Model Training
-
-### Data preprocessing
-
-Download [SAM checkpoint](https://dl.fbaipublicfiles.com/segment_anything/sam_vit_b_01ec64.pth) and place it at `work_dir/SAM/sam_vit_b_01ec64.pth` .
-
-Download the demo [dataset](https://zenodo.org/record/7860267) and unzip it to `data/FLARE22Train/`.
-
-This dataset contains 50 abdomen CT scans and each scan contains an annotation mask with 13 organs. The names of the organ label are available at [MICCAI FLARE2022](https://flare22.grand-challenge.org/).
-
-Run pre-processing
-
-Install `cc3d`: `pip install connected-components-3d`
-
-```bash
-python pre_CT_MR.py
-```
-
-- split dataset: 80% for training and 20% for testing
-- adjust CT scans to [soft tissue](https://radiopaedia.org/articles/windowing-ct) window level (40) and width (400)
-- max-min normalization
-- resample image size to `1024x1024`
-- save the pre-processed images and labels as `npy` files
-
-
-### Training on multiple GPUs (Recommend)
-
-The model was trained on five A100 nodes and each node has four GPUs (80G) (20 A100 GPUs in total). Please use the slurm script to start the training process.
-
-```bash
-sbatch train_multi_gpus.sh
-```
-
-When the training process is done, please convert the checkpoint to SAM's format for convenient inference.
-
-```bash
-python utils/ckpt_convert.py # Please set the corresponding checkpoint path first
-```
-
-### Training on one GPU
-
-```bash
-python train_one_gpu.py
-```
-
-
-
-## Acknowledgements
-- We highly appreciate all the challenge organizers and dataset owners for providing the public dataset to the community.
-- We thank Meta AI for making the source code of [segment anything](https://github.com/facebookresearch/segment-anything) publicly available.
-- We also thank Alexandre Bonnet for sharing this great [blog](https://encord.com/blog/learn-how-to-fine-tune-the-segment-anything-model-sam/)
-
-
-## Reference
-
-```
-@article{MedSAM,
-  title={Segment Anything in Medical Images},
-  author={Ma, Jun and He, Yuting and Li, Feifei and Han, Lin and You, Chenyu and Wang, Bo},
-  journal={Nature Communications},
-  volume={15},
-  pages={654},
-  year={2024}
-}
-```
+Built on [MedSAM by bowang-lab](https://github.com/bowang-lab/MedSAM). See [LICENSE](LICENSE) for the repository license.
