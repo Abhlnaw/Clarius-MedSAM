@@ -114,8 +114,15 @@ medsam_model.eval()
 img_np = io.imread(args.data_path)
 if len(img_np.shape) == 2:
     img_3c = np.repeat(img_np[:, :, None], 3, axis=-1)
+elif img_np.ndim == 3 and img_np.shape[-1] == 1:
+    img_3c = np.repeat(img_np, 3, axis=-1)
+elif img_np.ndim == 3 and img_np.shape[-1] in (3, 4):
+    # PNG images may include an alpha channel; the encoder expects RGB only.
+    img_3c = img_np[:, :, :3]
 else:
-    img_3c = img_np
+    raise ValueError(
+        f"Expected a grayscale, RGB, or RGBA image, got shape {img_np.shape}"
+    )
 H, W, _ = img_3c.shape
 # %% image preprocessing
 img_1024 = transform.resize(

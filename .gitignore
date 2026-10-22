@@ -11,6 +11,11 @@
 *.png
 data/
 work_dir/
+clarius_annotations/
+exported_images/
+*.rf
+*.raw
+*.lzo
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
