@@ -5,9 +5,11 @@ import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button, RectangleSelector
+from matplotlib.widgets import Button, CheckButtons, RadioButtons, RectangleSelector
+from matplotlib.patches import Patch
 import numpy as np
 from skimage import io, transform
+from scipy.ndimage import label as connected_components
 import torch
 from torch.nn import functional as F
 
@@ -48,10 +50,15 @@ class Viewer:
             button.on_clicked(callback)
             self.buttons.append(button)
         self.status = self.fig.text(0.12, 0.11, "")
-        self.texture_button = Button(self.fig.add_axes([0.12, 0.145, 0.23, 0.04]), "Split latest by GLCM")
+        self.texture_button = Button(self.fig.add_axes([0.12, 0.145, 0.23, 0.04]), "Split latest region")
         self.texture_button.on_clicked(self.split_texture)
         self.mask_button = Button(self.fig.add_axes([0.39, 0.145, 0.23, 0.04]), "Show MedSAM masks")
         self.mask_button.on_clicked(self.show_masks)
+        self.refinement_mode = RadioButtons(self.fig.add_axes([0.67, 0.135, 0.23, 0.085]),
+                                             ("Combined", "Brightness", "GLCM"))
+        self.refinement_mode.on_clicked(lambda _: self.split_texture() if self.texture is not None else None)
+        self.connected_only = CheckButtons(self.fig.add_axes([0.12, 0.195, 0.49, 0.025]),
+                                            ["Keep clicked connected patch only"], [True])
         self.fig.canvas.mpl_connect("button_press_event", self.pick_texture)
         self.fig.canvas.mpl_connect("close_event", lambda _: self.save())
         self.load()
@@ -132,6 +139,8 @@ class Viewer:
             self.fig.canvas.draw_idle()
 
     def redraw(self):
+        if self.ax.get_legend() is not None:
+            self.ax.get_legend().remove()
         rgba = np.zeros((self.height, self.width, 4))
         for i, (_, mask) in enumerate(self.regions):
             rgba[mask] = plt.get_cmap("tab10")(i % 10)
@@ -144,7 +153,12 @@ class Viewer:
                 rgba[labels == group, 3] = 0.45
             selected = self.texture.get("selected_group")
             if selected is not None:
-                rgba[(labels > 0) & (labels != selected), 3] = 0.08
+                rgba[(labels > 0) & ~self.texture["selected_mask"], 3] = 0.08
+            summaries = self.texture.get("group_summaries", [])
+            if summaries:
+                self.ax.legend(handles=[Patch(facecolor=plt.get_cmap("tab10")(item["group"] - 1),
+                    label=f"{item['group']}: {item['description']} ({item['fraction_of_parent']:.0%})")
+                    for item in summaries], loc="upper right", fontsize=8, framealpha=0.85)
         self.overlay.set_data(rgba)
         self.fig.canvas.draw_idle()
 
@@ -178,13 +192,23 @@ class Viewer:
             if i in self.refinements:
                 records[-1]["texture"] = {key: value for key, value in self.refinements[i].items()
                                            if key not in ("labels", "selected_mask", "features")}
+        # Match the full image's presentation in the axes, not the RF sample
+        # grid's aspect ratio. Use 2x canvas resolution for a sharper PNG.
+        # Never resample annotation arrays or crop the export to a zoomed view.
+        self.fig.canvas.draw()
+        bounds = self.ax.get_window_extent()
+        overlay_shape = (max(1, round(bounds.height * 2)), max(1, round(bounds.width * 2)))
+        rgba = np.asarray(self.overlay.get_array())
+        composite = self.image * (1 - rgba[..., 3:4]) + rgba[..., :3] * rgba[..., 3:4]
+        presentation = transform.resize(composite, (*overlay_shape, 3), order=1,
+                                        preserve_range=True, anti_aliasing=True)
         metadata = {"source": str(path.resolve()), "shape_hw": [self.height, self.width],
+                    "overlay_shape_hw": list(overlay_shape),
+                    "overlay_geometry": "full_frame_resized_to_viewer_axes; presentation_only_not_scan_conversion",
                     "note": "Display intensities normalized to 0..1; no physical calibration or diagnostic labels.",
                     "regions": records}
         self.output.joinpath(f"{path.name}.regions.json").write_text(json.dumps(metadata, indent=2))
-        plt.imsave(self.output / f"{path.name}.overlay.png",
-                   self.image * (1 - self.overlay.get_array()[..., 3:4])
-                   + self.overlay.get_array()[..., :3] * self.overlay.get_array()[..., 3:4])
+        plt.imsave(self.output / f"{path.name}.overlay.png", np.clip(presentation, 0, 1))
         self.status.set_text(f"Saved {len(records)} regions to {self.output}")
         self.fig.canvas.draw_idle()
 
@@ -200,19 +224,20 @@ class Viewer:
             self.status.set_text("Draw a MedSAM box first.")
             self.fig.canvas.draw_idle()
             return
-        self.status.set_text("Calculating local GLCM features inside the latest mask ...")
+        mode = self.refinement_mode.value_selected.lower()
+        self.status.set_text(f"Calculating {mode} features inside the latest mask ...")
         self.fig.canvas.draw()
         try:
-            refinement = analyze_texture(self.image.mean(axis=-1), self.regions[-1][1])
+            refinement = analyze_texture(self.image.mean(axis=-1), self.regions[-1][1], method=mode)
         except ValueError as error:
-            self.status.set_text(f"GLCM refinement unavailable: {error}")
+            self.status.set_text(f"Refinement unavailable: {error}")
             self.fig.canvas.draw_idle()
             return
         self.texture = refinement
         self.refinements[len(self.regions) - 1] = self.texture
         self.selector.set_active(False)
         groups = self.texture["actual_groups"]
-        self.status.set_text(f"GLCM: {groups} appearance group(s). Click one to keep it; Show MedSAM masks to draw.")
+        self.status.set_text(f"{mode.capitalize()}: {groups} group(s). Click one to keep it; switch mode to compare.")
         self.redraw()
 
     def pick_texture(self, event):
@@ -228,8 +253,15 @@ class Viewer:
         group = int(self.texture["labels"][y, x])
         if group:
             self.texture["selected_group"] = group
-            self.texture["selected_mask"] = self.texture["labels"] == group
-            self.status.set_text(f"Keeping texture group {group}: {int(self.texture['selected_mask'].sum())} pixels. Save to export.")
+            selected = self.texture["labels"] == group
+            if self.connected_only.get_status()[0]:
+                components, _ = connected_components(selected, structure=np.ones((3, 3)))
+                selected = components == components[y, x]
+                self.texture["selection_mode"] = "clicked_component_8_connected"
+            else:
+                self.texture["selection_mode"] = "whole_group"
+            self.texture["selected_mask"] = selected
+            self.status.set_text(f"Keeping {int(selected.sum())} pixels from group {group}. Save to export.")
             self.redraw()
 
     def show_masks(self, _=None):

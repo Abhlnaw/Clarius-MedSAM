@@ -1,5 +1,11 @@
 # Local GLCM texture refinement
 
+The viewer now defaults to **Combined**: local brightness statistics plus
+lower-weight GLCM descriptors. **Brightness** restores the previous approach,
+and **GLCM** keeps pure co-occurrence analysis. See [the workflow guide](README.md)
+for current controls. The GLCM mathematics below applies to the GLCM block in
+both Combined and GLCM modes.
+
 ## What a GLCM measures
 
 A gray-level co-occurrence matrix (GLCM) is a histogram of pairs of pixel
@@ -60,7 +66,7 @@ The tests compare the implementation directly with `graycomatrix` and
    but also loses brightness detail. The quantizer is fixed in normalized display
    units; it is not fitted separately to each local neighborhood.
 2. **Choose two neighborhood sizes.** The large window is approximately one
-   quarter of the mask's occupied height and width. The small window is half
+   eighth of the mask's occupied height and width, capped at 129 rows by 33 columns. Brightness mode retains quarter-mask windows without these caps. The small window is half
    that size. Sizes are rounded to odd numbers and are at least three pixels.
    The window extent comes from the selected mask, not the whole image.
 3. **Count local pairs.** At every masked pixel, construct a GLCM for each local
@@ -90,8 +96,8 @@ The tests compare the implementation directly with `graycomatrix` and
    requests up to three groups. Uniform data may yield fewer; the algorithm does
    not automatically infer the correct number of tissue types. Group IDs are
    ordered by cluster-center half-window contrast, not clinical meaning.
-8. **Select and save.** Click a colored group to keep all its pixels, including
-   disconnected patches. This is always a subset of the original MedSAM mask.
+8. **Select and save.** Click a colored group to keep the connected patch under the cursor. Disable
+   **Keep clicked connected patch only** to keep all disconnected matches too. This is always a subset of the original MedSAM mask.
    Save retains the parent mask, all GLCM feature maps and groups, and the selected
    refined mask. Original segmentation proposals are not overwritten.
 
@@ -102,20 +108,20 @@ can still use CUDA. Larger image regions and more gray levels cost more time.
 
 ## Saved data and compatibility
 
-New JSON texture records have `method: local_glcm_v1` and record gray levels,
+New JSON texture records have `method: local_glcm_v2` for pure GLCM, or `local_hybrid_v1` for Combined and record gray levels,
 quantization rule, offsets, symmetry, actual half/full windows, directional
 aggregation, feature names, requested/actual groups, and supported pixel counts.
 The NPZ arrays remain:
 
-- `texture_N_features`: `(height, width, 8)`, unstandardized GLCM features.
+- `texture_N_features`: unstandardized features with shape `(height, width, channels)`: 12 channels for Combined, four for Brightness, eight for GLCM.
 - `texture_N_labels`: integer labels `1..K`; zero outside the parent mask or
   where pair support is absent.
 - `texture_N_selected_mask`: boolean refined mask, empty until a group is clicked.
 
 `N` is the zero-based parent region index. Feature names give the exact channel
 order. Existing annotations with four mean/standard-deviation features remain
-readable and are not silently relabeled as GLCM. Clicking **Split latest by GLCM**
-explicitly replaces the latest region's stored refinement with a new GLCM result.
+readable and are not silently relabeled as GLCM. Clicking **Split latest region**
+explicitly replaces the latest region's stored refinement with the chosen method.
 
 ## What this does and does not establish
 
@@ -140,7 +146,7 @@ mask, and a single group need not match a complete anatomical structure.
 python -m unittest discover -s tests -p "test_clarius_*.py" -v
 ```
 
-The 18 tests cover reference GLCMs, known constant/checkerboard patterns,
+The 24 tests cover reference GLCMs, known constant/checkerboard patterns,
 directions and offsets, mask holes, edges, invalid input, unsupported pixels,
 automatic window sizing, deterministic grouping of spatially different patterns,
 and headless viewer selection, save/reload, undo, and legacy annotations.
@@ -150,3 +156,20 @@ refined a 49,097-pixel proposal in a 1520 by 192 Clarius frame. GLCM refinement
 took approximately 2.7 seconds on that machine. This checks end-to-end execution,
 not segmentation accuracy; no annotated ground truth was used. The test artifacts
 remain in the ignored local annotations directory and are not part of Git.
+
+## Hybrid weighting and appearance descriptions
+
+Combined appends eight GLCM channels to four intensity channels (half-window
+mean/std, full-window mean/std). After per-channel z-score normalization, mean
+channels receive weight `1/sqrt(2)`, standard-deviation channels `0.25`, and
+GLCM channels `0.35/sqrt(8)`. This prevents the eight GLCM features from dominating
+by their number and restores sensitivity to brightness differences. Saved feature
+arrays are unweighted; JSON records the weights used for clustering. Brightness
+and pure GLCM modes use unit feature weights.
+
+Group descriptions compare the group's original display-intensity mean and
+standard deviation with the parent region. A mean difference exceeding 0.03 on
+the normalized 0..1 scale is called darker or brighter. Variation is called higher
+above `1.15 * parent_std + 0.01`, or lower below `0.85 * parent_std - 0.01`. These
+thresholds provide reproducible descriptions, not clinical significance. Groups
+remain a coarse partition; small or rare features can still be merged.

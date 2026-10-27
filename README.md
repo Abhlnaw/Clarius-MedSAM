@@ -24,13 +24,17 @@ Grayscale, RGB, and RGBA inputs are converted to three channels. `MedSAM_Inferen
 
 ### Texture refinement inside oversized masks
 
+The viewer now offers **Combined** (default), **Brightness**, and **GLCM** modes. Combined restores the earlier local mean/standard-deviation features and adds lower-weight GLCM features. Brightness uses the earlier four-feature approach and larger original windows. GLCM uses co-occurrence features alone. Switch modes after splitting to compare the same parent mask. Combined/GLCM use smaller automatic windows, capped at 129 depth pixels by 33 lateral pixels, to reduce excessive spatial averaging.
+
+A legend describes each group relative to the parent mask (darker/brighter and lower/higher intensity variation), and those measurements are saved in JSON. These are appearance summaries, not tissue labels.
+
 `clarius_glcm.py` extracts local gray-level co-occurrence matrix (GLCM) features inside the latest MedSAM region. It measures contrast, homogeneity, energy, and correlation at two automatic neighborhood sizes, using 16 gray levels and four pixel-pair directions. `clarius_texture.py` standardizes the eight resulting features and uses fixed-seed k-means clustering to create up to three appearance groups.
 
-Neighborhood sizes are automatic: the larger window is approximately one quarter of the selected region's occupied height and width, and the smaller window is half that size. Only pairs with both endpoints inside the mask and local window contribute. Pixels without pair support are excluded from grouping.
+Neighborhood sizes are automatic: Brightness uses approximately one quarter of the selected region's occupied dimensions; Combined/GLCM use approximately one eighth with the caps above. Each method also uses a second window at half that size. Only pairs with both endpoints inside the mask and local window contribute. Pixels without pair support are excluded from grouping.
 
-Click **Split latest by GLCM**, then click a colored group to save it as a refined mask. The original MedSAM mask is retained. A selected group includes all its pixels, including disconnected patches. **Show MedSAM masks** returns to box drawing.
+Click **Split latest region**, then click a colored group to save it as a refined mask. The original MedSAM mask is retained. By default a click keeps only the connected patch under the cursor; disable **Keep clicked connected patch only** to select the entire group. **Show MedSAM masks** returns to box drawing.
 
-Three groups is a configurable code default, not an anatomical assumption or an automatically estimated number of tissue types. Existing four-feature annotations remain readable; splitting again explicitly replaces the latest refinement with GLCM features. See [the GLCM explanation](clarius/GLCM.md) for pair counting, feature formulas, parameters, output format, and limitations.
+Three groups is a configurable code default, not an anatomical assumption or an automatically estimated number of tissue types. Existing four-feature annotations remain readable; splitting again explicitly replaces the latest refinement with the selected method. See [the GLCM explanation](clarius/GLCM.md) for pair counting, feature formulas, parameters, output format, and limitations.
 
 ## Run the Clarius workflow
 
@@ -61,7 +65,7 @@ Each image produces:
 
 - **NPZ:** individual MedSAM masks, plus texture labels, feature maps, and selected refined masks when texture analysis has been run. Separate masks preserve overlaps.
 - **JSON:** source image, bounding boxes, region IDs, pixel areas, display brightness statistics, and texture settings.
-- **PNG:** the current overlay view.
+- **PNG:** the full-frame overlay resized to the viewer axes proportions at twice the canvas resolution, so tall RF sample grids do not appear as narrow strips. This is a presentation image; masks remain on the original grid.
 
 Generated annotations, raw RF data, exported images, and model checkpoints are excluded from new Git commits by `.gitignore`.
 
@@ -77,7 +81,7 @@ The feature, grouping, and headless viewer tests check GLCM calculations against
 python -m unittest discover -s tests -p "test_clarius_*.py" -v
 ```
 
-All 18 tests pass. A headless end-to-end smoke test also ran the actual checkpoint on CUDA with an exported Clarius frame; GLCM refinement took about 2.7 seconds for a 49,097-pixel candidate mask. This verifies execution, not anatomical accuracy. See [validation details](clarius/GLCM.md#validation).
+All 24 tests pass, including mode switching and brightness-sensitive hybrid grouping. A headless end-to-end smoke test also ran the actual checkpoint on CUDA with an exported Clarius frame; GLCM refinement took about 2.7 seconds for a 49,097-pixel candidate mask. This verifies execution, not anatomical accuracy. See [validation details](clarius/GLCM.md#validation).
 
 ## Attribution
 

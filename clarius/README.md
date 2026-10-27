@@ -43,29 +43,39 @@ the window, especially on CPU.
 
 ## Refine an oversized mask using texture
 
-After drawing a box, click **Split latest by GLCM**. The latest MedSAM region
-is partitioned into up to three appearance groups using local GLCM contrast,
-homogeneity, energy, and correlation at half and full window sizes. Pair counts
-exclude pixels outside that region or the local window. The original MedSAM mask
-is preserved. See [how GLCM works](GLCM.md) for the complete algorithm and formulas.
+After drawing a box, click **Split latest region**. Choose a method:
 
-Neighborhood sizes are chosen automatically from the selected mask: the larger
-window is approximately one quarter of the occupied region's height and width,
-and the smaller window is half that size, with a minimum of three pixels per
-direction. No slider adjustments or physical measurements are needed. This is a
-relative-scale heuristic; it does not estimate acquisition geometry or guarantee
-the best scale for every tissue pattern. Larger regions receive larger filters.
+- **Combined** (default): local mean/standard deviation plus GLCM. Brightness
+  has more influence so that dark patches are not lost solely because their
+  GLCM pattern resembles surrounding tissue.
+- **Brightness**: the earlier four-feature mean/standard-deviation approach,
+  using the original automatic quarter-region window sizes.
+- **GLCM**: co-occurrence features alone, retained for comparison.
 
-Click a colored group to select it as the refined mask. All pixels of that group
-are selected, including disconnected patches. Other groups become faint. Click
+Switching modes while viewing a refinement recomputes it on the same parent mask
+and clears the previous subgroup selection. The parent MedSAM mask is retained.
+Combined/GLCM use approximately one eighth of the occupied mask dimensions,
+with maximum full-window dimensions of 129 rows by 33 columns. Each also uses a
+half-size window. These pixel-grid heuristics reduce excessive averaging but
+are not physical calibration. No manual depth/lateral measurements are needed.
+
+A color legend reports darker/brighter and lower/higher intensity variation
+relative to the parent mask. JSON saves the group mean, standard deviation,
+area fraction, and description. These categories do not identify anatomy or
+abnormality. A small dark feature may still require a tighter bounding box;
+three global clusters do not guarantee that every visible detail is isolated.
+
+Click a colored group to select it as the refined mask. By default only the connected patch under the cursor is selected. Disable
+**Keep clicked connected patch only** to keep the entire group, including
+disconnected patches. Other groups become faint. Click
 **Show MedSAM masks** to return to box drawing. Texture analysis applies to the
 latest region; Undo that region if you need to work on an earlier one.
 
 Save adds `texture_N_labels`, `texture_N_features`, and `texture_N_selected_mask`
 arrays to the existing NPZ, where N is the zero-based parent region index.
 Labels are 1..K where pair support exists; zero means outside the parent or
-unsupported at either scale. Feature arrays now have eight GLCM channels. JSON
-records method `local_glcm_v1`, quantization, offsets, window sizes, feature names,
+unsupported at either scale. Feature arrays have 12 channels for Combined, four for Brightness, and eight for GLCM. JSON
+records method `local_hybrid_v1`, `local_intensity_v1`, or `local_glcm_v2`, window sizes, feature names,
 support counts, and the selected group (null until clicked). Older four-feature
 annotations remain readable until explicitly recomputed. The overlay PNG saves
 the current display. These arrays reload with annotations; Split recomputes them
@@ -78,3 +88,12 @@ Algorithm checks (in your inference Python environment):
 ```powershell
 python -m unittest discover -s tests -p "test_clarius_*.py" -v
 ```
+
+## Overlay export proportions
+
+The saved `.overlay.png` matches the viewer image-area proportions at twice the
+canvas resolution. The full frame is exported even if the viewer is zoomed. This
+resizing is for presentation, not scan conversion or physical calibration. NPZ
+masks, feature maps, boxes, and `shape_hw` retain the original sample grid. JSON
+records `overlay_shape_hw` and `overlay_geometry` separately. Restart the viewer
+and save again to regenerate an older narrow overlay.

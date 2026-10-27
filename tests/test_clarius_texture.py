@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from clarius_texture import analyze_texture, automatic_window, texture_groups
+from clarius_texture import analyze_texture, automatic_window, localized_window, texture_groups
 
 
 class TextureTests(unittest.TestCase):
@@ -13,7 +13,7 @@ class TextureTests(unittest.TestCase):
         padded = np.pad(mask, ((100, 200), (80, 90)))
         self.assertEqual(automatic_window(padded), (21, 11))
         image = np.zeros(mask.shape)
-        expected, _ = texture_groups(image, mask, window=(21, 11))
+        expected, _ = texture_groups(image, mask, window=localized_window(mask))
         actual, _ = texture_groups(image, mask)
         np.testing.assert_array_equal(actual, expected)
 
@@ -57,7 +57,7 @@ class TextureTests(unittest.TestCase):
         mask[2:10, 2:10] = True
         mask[18, 18] = True
         result = analyze_texture(np.zeros(mask.shape), mask)
-        self.assertEqual(result["method"], "local_glcm_v1")
+        self.assertEqual(result["method"], "local_glcm_v2")
         self.assertEqual(len(result["feature_names"]), 8)
         self.assertEqual(result["labels"][18, 18], 0)
         self.assertEqual(result["unsupported_mask_pixels"], 1)
@@ -66,6 +66,32 @@ class TextureTests(unittest.TestCase):
     def test_isolated_region_is_rejected(self):
         with self.assertRaisesRegex(ValueError, "neighboring pixel pairs"):
             texture_groups(np.zeros((1, 1)), np.ones((1, 1), bool))
+
+    def test_smaller_bounded_windows_for_elongated_frame(self):
+        mask = np.ones((1520, 192), bool)
+        self.assertEqual(localized_window(mask), (129, 25))
+        self.assertLess(localized_window(mask)[0], automatic_window(mask)[0])
+
+    def test_combined_restores_brightness_discrimination(self):
+        image = np.full((80, 100), 0.2)
+        image[:, 50:] = 0.8
+        mask = np.ones(image.shape, bool)
+        result = analyze_texture(image, mask, groups=2, method="combined")
+        self.assertNotEqual(result["labels"][40, 20], result["labels"][40, 80])
+        self.assertEqual(result["features"].shape[-1], 12)
+        self.assertEqual(len(result["feature_weights_after_zscore"]), 12)
+
+    def test_brightness_mode_uses_original_moments_and_background_masking(self):
+        image = np.random.default_rng(5).random((40, 60))
+        mask = np.zeros(image.shape, bool)
+        mask[5:35, 10:50] = True
+        result = analyze_texture(image, mask, method="brightness")
+        self.assertEqual(result["window_hw_pixels"], list(automatic_window(mask)))
+        self.assertEqual(result["features"].shape[-1], 4)
+        image[~mask] = 1000
+        other = analyze_texture(image, mask, method="brightness")
+        np.testing.assert_array_equal(result["labels"], other["labels"])
+        self.assertNotIn("gray_levels", result)
 
     def test_empty_mask_rejected(self):
         with self.assertRaises(ValueError):
