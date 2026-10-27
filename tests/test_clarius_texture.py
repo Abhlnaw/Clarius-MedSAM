@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from clarius_texture import automatic_window, texture_groups
+from clarius_texture import analyze_texture, automatic_window, texture_groups
 
 
 class TextureTests(unittest.TestCase):
@@ -22,7 +22,7 @@ class TextureTests(unittest.TestCase):
 
     def test_outside_intensities_do_not_affect_groups(self):
         image = np.zeros((90, 100))
-        image[:, 50:] = 0.8
+        image[:, 50:] = (np.indices((90, 50)).sum(axis=0) % 2) * 0.8
         mask = np.zeros_like(image, dtype=bool)
         mask[10:80, 10:90] = True
         labels, features = texture_groups(image, mask, (21, 15))
@@ -38,7 +38,34 @@ class TextureTests(unittest.TestCase):
         labels, features = texture_groups(np.full(mask.shape, 0.5), mask, (301, 151))
         np.testing.assert_array_equal(labels, np.ones(mask.shape))
         self.assertTrue(np.isfinite(features).all())
-        np.testing.assert_allclose(features[..., 1::2], 0, atol=1e-6)
+        np.testing.assert_allclose(features, np.tile([0, 1, 1, 1] * 2, (8, 9, 1)), atol=1e-6)
+
+    def test_same_brightness_different_spatial_pattern(self):
+        # Both interiors have equal mean and variance; co-occurrence differs.
+        image = np.zeros((80, 160))
+        image[:, :80] = np.indices((80, 80)).sum(axis=0) % 2
+        image[:, 80:] = (np.indices((80, 80))[1] // 4) % 2
+        mask = np.ones(image.shape, bool)
+        labels, maps = texture_groups(image, mask, window=(15, 15), groups=2)
+        self.assertNotEqual(labels[40, 30], labels[40, 120])
+        self.assertGreater(abs(float(maps[40, 30, 0] - maps[40, 120, 0])), 1)
+        again, _ = texture_groups(image, mask, window=(15, 15), groups=2)
+        np.testing.assert_array_equal(labels, again)
+
+    def test_metadata_and_unsupported_pixels(self):
+        mask = np.zeros((20, 20), bool)
+        mask[2:10, 2:10] = True
+        mask[18, 18] = True
+        result = analyze_texture(np.zeros(mask.shape), mask)
+        self.assertEqual(result["method"], "local_glcm_v1")
+        self.assertEqual(len(result["feature_names"]), 8)
+        self.assertEqual(result["labels"][18, 18], 0)
+        self.assertEqual(result["unsupported_mask_pixels"], 1)
+        self.assertEqual(result["actual_groups"], 1)
+
+    def test_isolated_region_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "neighboring pixel pairs"):
+            texture_groups(np.zeros((1, 1)), np.ones((1, 1), bool))
 
     def test_empty_mask_rejected(self):
         with self.assertRaises(ValueError):

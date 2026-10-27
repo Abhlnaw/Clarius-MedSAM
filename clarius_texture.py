@@ -1,7 +1,8 @@
-"""Mask-aware, multiscale local-intensity texture grouping."""
+"""Group local GLCM features within a MedSAM candidate region."""
 
 import numpy as np
-from scipy.ndimage import uniform_filter
+from clarius_glcm import (DEFAULT_LEVELS, DEFAULT_OFFSETS, FEATURE_NAMES,
+                          analysis_windows, local_glcm_features)
 
 
 def automatic_window(mask):
@@ -18,60 +19,82 @@ def automatic_window(mask):
     return tuple(max(3, int(round(extent / 4)) // 2 * 2 + 1) for extent in extents)
 
 
-def texture_groups(gray, mask, window=None, groups=3):
-    """Return labels 1..K inside mask, zero outside, and local feature maps.
-
-    Windows are (depth pixels, lateral pixels), not physical measurements.
-    Only masked pixels contribute to local moments. Groups describe appearance,
-    not tissue identity. IDs are ordered by local mean brightness.
-    """
-    gray = np.asarray(gray, dtype=np.float64)
-    mask = np.asarray(mask, dtype=bool)
-    if gray.shape != mask.shape or gray.ndim != 2:
-        raise ValueError("Expected matching 2D image and mask")
-    if not mask.any():
-        raise ValueError("Select a nonempty MedSAM region first")
-    if window is None:
-        window = automatic_window(mask)
-    if min(window) < 3 or groups < 2:
-        raise ValueError("Windows must be >=3 pixels and groups >=2")
-    features = []
-    for scale in (0.5, 1.0):
-        size = tuple(max(3, int(n * scale) // 2 * 2 + 1) for n in window)
-        weight = uniform_filter(mask.astype(float), size, mode="constant")
-        denominator = np.maximum(weight, 1e-12)
-        mean = uniform_filter(np.where(mask, gray, 0), size, mode="constant") / denominator
-        second = uniform_filter(np.where(mask, gray * gray, 0), size, mode="constant") / denominator
-        features.extend([mean, np.sqrt(np.maximum(second - mean * mean, 0))])
-    maps = np.stack(features, axis=-1).astype(np.float32)
-    values = maps[mask].astype(float)
+def _cluster_features(maps, support, groups):
+    if not isinstance(groups, (int, np.integer)) or not 1 <= groups <= 255:
+        raise ValueError("Groups must be an integer from 1 to 255")
+    if not support.any():
+        raise ValueError("Region has no valid neighboring pixel pairs at both scales; draw a larger region")
+    values = maps[support].astype(float)
     center = values.mean(axis=0)
     spread = values.std(axis=0)
     spread[spread < 1e-6] = 1.0
     values = (values - center) / spread
     # Bounded deterministic training sample; classify the full region in chunks.
-    sample = values[::max(1, len(values) // 20000)][:20000]
-    centers = [sample[np.argmin(np.sum(sample * sample, axis=1))]]
-    for _ in range(1, min(groups, len(sample))):
-        distance = np.min([np.sum((sample - c) ** 2, axis=1) for c in centers], axis=0)
-        if distance.max() < 1e-10:
-            break
-        centers.append(sample[np.argmax(distance)])
-    centers = np.array(centers)
-    for _ in range(40):
-        labels = np.argmin(((sample[:, None] - centers) ** 2).sum(axis=2), axis=1)
-        updated = np.array([sample[labels == i].mean(axis=0) if np.any(labels == i) else c
-                            for i, c in enumerate(centers)])
-        if np.allclose(updated, centers, atol=1e-4):
-            break
-        centers = updated
+    sample = values[np.linspace(0, len(values) - 1, min(20000, len(values)), dtype=int)]
+    # Multiple deterministic starts reduce the chance of isolating edge outliers
+    # while merging two substantial texture populations into a single group.
+    starts = [int(np.argmin(np.sum(sample * sample, axis=1))),
+              int(np.argmin(sample[:, 0])), int(np.argmax(sample[:, 0]))]
+    rng = np.random.default_rng(2023)
+    best_error, best_centers = np.inf, None
+    for start in dict.fromkeys(starts):
+        centers = [sample[start]]
+        for _ in range(1, min(groups, len(sample))):
+            distance = np.min([np.sum((sample - c) ** 2, axis=1) for c in centers], axis=0)
+            if distance.max() < 1e-10:
+                break
+            centers.append(sample[rng.choice(len(sample), p=distance / distance.sum())])
+        centers = np.array(centers)
+        for _ in range(40):
+            labels = np.argmin(((sample[:, None] - centers) ** 2).sum(axis=2), axis=1)
+            updated = np.array([sample[labels == i].mean(axis=0) if np.any(labels == i) else c
+                                for i, c in enumerate(centers)])
+            converged = np.allclose(updated, centers, atol=1e-4)
+            centers = updated
+            if converged:
+                break
+        error = np.min(((sample[:, None] - centers) ** 2).sum(axis=2), axis=1).sum()
+        if error < best_error:
+            best_error, best_centers = error, centers
+    centers = best_centers
     order = np.argsort(centers[:, 0])
     centers = centers[order]
     assigned = np.empty(len(values), dtype=np.uint8)
     for start in range(0, len(values), 50000):
         assigned[start:start + 50000] = 1 + np.argmin(
             ((values[start:start + 50000, None] - centers) ** 2).sum(axis=2), axis=1)
-    result = np.zeros(mask.shape, dtype=np.uint8)
-    result[mask] = assigned
-    maps[~mask] = 0
-    return result, maps
+    result = np.zeros(support.shape, dtype=np.uint8)
+    result[support] = assigned
+    return result
+
+
+def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS):
+    """Produce the arrays and reproducibility metadata saved by the viewer.
+
+    Groups are a requested maximum, not automatically inferred tissue classes.
+    Labels are ordered by standardized half-window contrast of cluster centers.
+    Zero means outside the mask or without local pair support.
+    """
+    automatic = window is None
+    if automatic:
+        window = automatic_window(mask)
+    features, support = local_glcm_features(gray, mask, window, levels=levels)
+    labels = _cluster_features(features, support, groups)
+    return {"method": "local_glcm_v1", "labels": labels, "features": features,
+            "feature_names": list(FEATURE_NAMES), "window_hw_pixels": list(window),
+            "analysis_windows_hw_pixels": [list(w) for w in analysis_windows(window)],
+            "window_selection": "automatic_quarter_mask_extent" if automatic else "explicit",
+            "gray_levels": int(levels), "quantization": "floor(clip(gray,0,1)*levels), capped at levels-1",
+            "offsets_dy_dx": [list(o) for o in DEFAULT_OFFSETS],
+            "symmetric": True, "direction_aggregation": "equal_mean_over_supported_directions",
+            "clustering": "deterministic_kmeans_zscore", "requested_groups": int(groups),
+            "actual_groups": int(len(np.unique(labels[support]))),
+            "supported_pixels": int(support.sum()),
+            "unsupported_mask_pixels": int(np.count_nonzero(mask) - support.sum()),
+            "selected_group": None, "selected_mask": np.zeros(labels.shape, dtype=bool)}
+
+
+def texture_groups(gray, mask, window=None, groups=3):
+    """Compatibility wrapper returning (labels, eight local GLCM feature maps)."""
+    result = analyze_texture(gray, mask, window=window, groups=groups)
+    return result["labels"], result["features"]
