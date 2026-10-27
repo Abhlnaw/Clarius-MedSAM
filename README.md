@@ -22,19 +22,13 @@ This keeps axes, titles, and screen-resolution scaling out of the segmentation i
 
 Grayscale, RGB, and RGBA inputs are converted to three channels. `MedSAM_Inference.py` also handles RGBA and single-channel images so PNG alpha channels do not cause the encoder's channel-count error.
 
-### Texture refinement inside oversized masks
+### Automatic texture-guided region selection
 
-The viewer now offers **Combined** (default), **Brightness**, and **GLCM** modes. Combined restores the earlier local mean/standard-deviation features and adds lower-weight GLCM features. Brightness uses the earlier four-feature approach and larger original windows. GLCM uses co-occurrence features alone. Switch modes after splitting to compare the same parent mask. Combined/GLCM use smaller automatic windows, capped at 129 depth pixels by 33 lateral pixels, to reduce excessive spatial averaging.
+The **Low / High variation** mode now automatically finds a coherent tissue region from a Combined or GLCM proposal. It replaces the earlier whole-color standard-deviation merge with compact-body seed selection, robust local appearance matching across source colors, spatial cleanup, and dark-cavity protection. It retains the main component while suppressing narrow lower spillover. No tissue click, painting, or second crop is required after the MedSAM box.
 
-A legend describes each group relative to the parent mask (darker/brighter and lower/higher intensity variation), and those measurements are saved in JSON. These are appearance summaries, not tissue labels.
+Combined is the default source; select GLCM before returning to the automatic mode, or use `--auto-source glcm`. The default quantization is eight gray levels; `--glcm-levels 16`, `32`, or `64` is available. Higher levels cost substantially more CPU time.
 
-`clarius_glcm.py` extracts local gray-level co-occurrence matrix (GLCM) features inside the latest MedSAM region. It measures contrast, homogeneity, energy, and correlation at two automatic neighborhood sizes, using 16 gray levels and four pixel-pair directions. `clarius_texture.py` standardizes the eight resulting features and uses fixed-seed k-means clustering to create up to three appearance groups.
-
-Neighborhood sizes are automatic: Brightness uses approximately one quarter of the selected region's occupied dimensions; Combined/GLCM use approximately one eighth with the caps above. Each method also uses a second window at half that size. Only pairs with both endpoints inside the mask and local window contribute. Pixels without pair support are excluded from grouping.
-
-Click **Split latest region**, then click a colored group to save it as a refined mask. The original MedSAM mask is retained. By default a click keeps only the connected patch under the cursor; disable **Keep clicked connected patch only** to select the entire group. **Show MedSAM masks** returns to box drawing.
-
-Three groups is a configurable code default, not an anatomical assumption or an automatically estimated number of tissue types. Existing four-feature annotations remain readable; splitting again explicitly replaces the latest refinement with the selected method. See [the GLCM explanation](clarius/GLCM.md) for pair counting, feature formulas, parameters, output format, and limitations.
+The original MedSAM masks and source labels are retained alongside the automatic result. GLCM maps, automatic results, and recent image embeddings are cached. The manual correction tools from the rejected iteration have been removed. See [the current workflow](clarius/README.md) and [algorithm details](clarius/GLCM.md).
 
 ## Run the Clarius workflow
 
@@ -81,7 +75,7 @@ The feature, grouping, and headless viewer tests check GLCM calculations against
 python -m unittest discover -s tests -p "test_clarius_*.py" -v
 ```
 
-All 24 tests pass, including mode switching and brightness-sensitive hybrid grouping. A headless end-to-end smoke test also ran the actual checkpoint on CUDA with an exported Clarius frame; GLCM refinement took about 2.7 seconds for a 49,097-pixel candidate mask. This verifies execution, not anatomical accuracy. See [validation details](clarius/GLCM.md#validation).
+The regression suite checks both numerical features and automatic-region behavior. Qualitative evaluation also uses exam04/exam05 frames and the actual CUDA checkpoint with no tissue-selection clicks. These checks do not establish anatomical accuracy without expert reference masks. See [validation details](clarius/README.md#validation).
 
 ## Attribution
 

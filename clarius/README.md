@@ -1,99 +1,75 @@
-# Clarius ultrasound additions: workflow guide
+# Clarius ultrasound workflow
 
-This guide covers the MATLAB export, interactive annotation, and texture refinement added to the MedSAM codebase. See [the project README](../README.md) for a summary of the changes.
+## Run
 
-1. In MATLAB, run `clarius/runme2_export.m` from this repository. It is a copy
-   of your `runme2.m`; set its exam directory near the top as needed. The original
-   MATLAB script is unchanged. This copy exports clean grayscale RF-derived
-   B-mode pixels to the exam's `exported_images` directory and JSON provenance
-   beside each PNG. Rerun exports before using old screenshot-based frames.
-2. From the MedSAM directory, in the Python environment you use for inference:
+Set the exam directory in `clarius/runme2_export.m`, then export the underlying B-mode pixels (not plot screenshots):
 
-   ```powershell
-   python MedSAM_Clarius.py --checkpoint .\medsam_vit_b.pth --device cuda:0 -i "C:\Users\abhit\Documents\Hoyt Research\data\exam04\exported_images"
-   ```
+```powershell
+matlab -batch "run('clarius/runme2_export.m')"
+```
 
-   For a single image, pass its filename instead of a directory. For CPU use
-   `--device cpu`. This viewer uses the existing Matplotlib dependency, not PyQt5.
-3. Drag with the left mouse button around one target. Release to generate its
-   mask. Repeat for additional regions; Undo removes the last region. Use the
-   Matplotlib toolbar to zoom, then turn off zoom/pan before drawing a box.
-4. Save writes to `clarius_annotations` (override with `--output`). Previous/Next
-   and window close also save. Existing annotations reload on return to a frame.
-   Use a separate output directory for each exam to avoid filename collisions.
+Start the interactive viewer using your inference Python environment:
 
-Each image produces an NPZ containing `masks` with shape `(regions, height, width)`,
-a JSON file with boxes, region IDs, pixel areas and display brightness statistics,
-and a PNG overlay. Separate masks preserve overlapping selections. Region IDs are
-generic annotation labels, not anatomical or diagnostic predictions.
+```powershell
+python MedSAM_Clarius.py --checkpoint .\medsam_vit_b.pth --device cuda:0 -i "C:\Users\abhit\Documents\Hoyt Research\data\exam05\exported_images" --output ".\clarius_annotations\exam05_glcm_test" --glcm-levels 8
+```
 
-These exports are unscanconverted sample/line images. The viewer stretches them
-to a convenient display shape; saved masks always retain the original pixel grid.
-Physical measurements require verified acquisition geometry and scan conversion.
-The hardcoded depth/pitch values in the MATLAB viewer are not used for measurements.
-Per-frame display normalization means brightness statistics are not calibrated
-or directly comparable across frames. Standard deviation is intensity variation,
-not an abnormality score. The optional texture step combines local intensity statistics for appearance grouping.
+The input can also be a single image. Use a separate output folder per exam. Use `--device cpu` without CUDA. The original external `runme2.m` is unchanged; its copy in this repository exports the RF-derived B-mode pixels and JSON provenance.
 
-MedSAM provides box-prompted proposals, not guaranteed ultrasound boundaries or
-lesion detection. Inspect every result; redraw a tighter box or undo an incorrect
-proposal. This version does not include manual boundary painting or tracking
-between frames. Encoding and inference run synchronously and may briefly pause
-the window, especially on CPU.
+## Automatic region selection
 
-## Refine an oversized mask using texture
+1. Draw the MedSAM bounding box around the target.
+2. Leave **Low / High variation** selected and click **Split latest region**.
+3. The region is found and selected automatically. Review the overlay and Save.
 
-After drawing a box, click **Split latest region**. Choose a method:
+No tissue click, painting, or secondary crop is required. The manual Add/Exclude/Keep-selected workflow was removed.
 
-- **Combined** (default): local mean/standard deviation plus GLCM. Brightness
-  has more influence so that dark patches are not lost solely because their
-  GLCM pattern resembles surrounding tissue.
-- **Brightness**: the earlier four-feature mean/standard-deviation approach,
-  using the original automatic quarter-region window sizes.
-- **GLCM**: co-occurrence features alone, retained for comparison.
+The automatic mode uses **Combined** as its default source proposal. To use pure GLCM, select **GLCM**, then return to **Low / High variation**, or start with `--auto-source glcm`. Combined, Brightness, and GLCM remain available as inspection views; their original click-to-select behavior is unchanged.
 
-Switching modes while viewing a refinement recomputes it on the same parent mask
-and clears the previous subgroup selection. The parent MedSAM mask is retained.
-Combined/GLCM use approximately one eighth of the occupied mask dimensions,
-with maximum full-window dimensions of 129 rows by 33 columns. Each also uses a
-half-size window. These pixel-grid heuristics reduce excessive averaging but
-are not physical calibration. No manual depth/lateral measurements are needed.
+### How automatic refinement differs from the earlier variation merge
 
-A color legend reports darker/brighter and lower/higher intensity variation
-relative to the parent mask. JSON saves the group mean, standard deviation,
-area fraction, and description. These categories do not identify anatomy or
-abnormality. A small dark feature may still require a tighter bounding box;
-three global clusters do not guarantee that every visible detail is isolated.
+The earlier implementation merged whole colors by their overall standard deviation and chose the largest region. That could cut tissue into color bands, retain unrelated lower areas, or choose a mixed population as its intensity model.
 
-Click a colored group to select it as the refined mask. By default only the connected patch under the cursor is selected. Disable
-**Keep clicked connected patch only** to keep the entire group, including
-disconnected patches. Other groups become faint. Click
-**Show MedSAM masks** to return to box drawing. Texture analysis applies to the
-latest region; Undo that region if you need to work on an earlier one.
+The new algorithm in `clarius_auto.py` instead:
 
-Save adds `texture_N_labels`, `texture_N_features`, and `texture_N_selected_mask`
-arrays to the existing NPZ, where N is the zero-based parent region index.
-Labels are 1..K where pair support exists; zero means outside the parent or
-unsupported at either scale. Feature arrays have 12 channels for Combined, four for Brightness, and eight for GLCM. JSON
-records method `local_hybrid_v1`, `local_intensity_v1`, or `local_glcm_v2`, window sizes, feature names,
-support counts, and the selected group (null until clicked). Older four-feature
-annotations remain readable until explicitly recomputed. The overlay PNG saves
-the current display. These arrays reload with annotations; Split recomputes them
-using the automatic scales. Group IDs are per-region appearance clusters, not
-consistent tissue classes across frames. This can narrow an oversized proposal,
-but will not recover tissue excluded by MedSAM or guarantee an anatomical boundary.
+- Finds compact candidate bodies within the source proposal, suppressing narrow bridges and tails before comparing them.
+- Scores candidate area with a penalty for dispersion of local mean intensity, so a large mixed population does not automatically win.
+- Learns robust brightness and texture ranges from that automatic seed.
+- Recovers compatible tissue across source colors using GLCM descriptors and local speckle variation.
+- Uses spatial opening and a bounded boundary envelope to limit lower ribbons and distant spillover.
+- Keeps the component attached to the automatic seed, then the largest final component.
+- Reapplies a dark-cavity exclusion after cleanup, rather than indiscriminately filling holes. The final mask always remains inside the parent MedSAM mask.
 
-Algorithm checks (in your inference Python environment):
+It has no hardcoded depth cutoff and does not simply choose the top color. Shape processing occurs on a 256 by 256 normalized region grid to account for the unequal RF row/column sampling. This is a geometric heuristic, not physical scan conversion.
+
+Source groups still describe appearance, not anatomy. The method is an automatic tissue-region heuristic, not a trained liver or portal-vein detector. Dark shadows can resemble cavities, and very different acquisitions can require further validation. Review the resulting mask.
+
+## Settings and performance
+
+`--glcm-levels` accepts 8 (default), 16, 32, or 64. Increasing levels substantially increases CPU GLCM cost. MedSAM encoding runs on the requested device; GLCM and spatial refinement run on CPU.
+
+The viewer caches up to three image embeddings, shares GLCM maps between Combined and GLCM, and caches automatic results. Revisiting a proposal avoids recalculating its features. Creating a new parent region invalidates texture caches.
+
+On the local RTX 5070 laptop setup, warm GPU image encoding measured about 0.2 seconds. First exam05 Combined/automatic calculations took roughly 4?7 seconds at eight levels; the previous 32-level texture pass took about 27 seconds. Console timings report each operation. First calculations are synchronous and may briefly pause the window.
+
+## Saving
+
+Save writes all original regions on the current frame and each region's latest refinement. Navigation and closing save when edits are pending. Outputs are updated in place:
+
+- **`.regions.npz`:** original `masks`, plus `texture_N_features`, `texture_N_labels`, `texture_N_selected_mask`, and (for automatic results) `texture_N_source_labels`. `N` is the zero-based parent region index. Labels are 1 for the automatically retained region and 0 outside; the original source partition is stored separately.
+- **`.regions.json`:** boxes, pixel measurements, GLCM settings, `method: automatic_tissue_v1`, source method, and `automatic_refinement` diagnostics: seed scores, scale/radii, learned thresholds, and retained area.
+- **`.overlay.png`:** the full-frame overlay at viewer proportions, at twice the canvas resolution with a 2048-pixel longest-edge cap. Zoom does not crop the saved image.
+
+Mask and feature arrays retain their native sample grid. Resizing the PNG is for presentation, not physical calibration. `shape_hw` and `overlay_shape_hw` record the separate dimensions. Original model masks and source partitions are preserved. Old annotation records remain readable.
+
+## Validation
 
 ```powershell
 python -m unittest discover -s tests -p "test_clarius_*.py" -v
 ```
 
-## Overlay export proportions
+Tests compare GLCM features with scikit-image and exercise automatic recovery across source labels, dark-cavity preservation, rejection of narrow lower lobes, seed scoring, reversed target position, mask containment, source-view switching, caching, save/reload, and overlay proportions.
 
-The saved `.overlay.png` matches the viewer image-area proportions at twice the
-canvas resolution. The full frame is exported even if the viewer is zoomed. This
-resizing is for presentation, not scan conversion or physical calibration. NPZ
-masks, feature maps, boxes, and `shape_hw` retain the original sample grid. JSON
-records `overlay_shape_hw` and `overlay_geometry` separately. Restart the viewer
-and save again to regenerate an older narrow overlay.
+Local evaluation includes saved exam04/exam05 frames with both source methods and additional exam05 frames processed using the existing box prompt and the actual CUDA checkpoint. No tissue selections or correction inputs are supplied. Comparisons are qualitative; there are no expert ground-truth masks, so these checks do not establish anatomical accuracy.
+
+Per-frame normalization also means brightness statistics are not calibrated across acquisitions. Measurements are in pixels until acquisition geometry and scan conversion are verified.
