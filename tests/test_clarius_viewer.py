@@ -5,6 +5,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import matplotlib
 matplotlib.use("Agg")
@@ -62,6 +63,7 @@ class ViewerTests(unittest.TestCase):
             self.assertNotIn("texture_0_labels", data.files)
 
     def test_existing_four_feature_annotations_remain_readable(self):
+        self.viewer.refinement_mode.set_active(0)
         mask = self.viewer.regions[0][1]
         self.viewer.refinements[0] = {
             "labels": mask.astype(np.uint8), "features": np.zeros((*mask.shape, 4)),
@@ -74,6 +76,7 @@ class ViewerTests(unittest.TestCase):
         self.assertEqual(self.viewer.refinements[0]["features"].shape[-1], 12)
 
     def test_switch_methods_recomputes_without_changing_parent(self):
+        self.viewer.refinement_mode.set_active(0)
         parent = self.viewer.regions[0][1].copy()
         self.viewer.split_texture()
         self.assertEqual(self.viewer.texture["method"], "local_hybrid_v1")
@@ -83,6 +86,34 @@ class ViewerTests(unittest.TestCase):
         self.viewer.refinement_mode.set_active(2)
         self.assertEqual(self.viewer.texture["features"].shape[-1], 8)
         np.testing.assert_array_equal(self.viewer.regions[0][1], parent)
+
+    def test_automatic_mode_needs_no_click_and_saves_original_source_labels(self):
+        viewer = self.viewer
+        self.assertEqual(viewer.refinement_mode.value_selected, "Low / High variation")
+        viewer.split_texture()
+        self.assertEqual(viewer.texture["method"], "automatic_tissue_v1")
+        self.assertEqual(viewer.texture["source_method"], "local_hybrid_v1")
+        self.assertTrue(viewer.texture["selected_mask"].any())
+        self.assertFalse(viewer.texture["selected_mask"][~viewer.regions[0][1]].any())
+        viewer.save()
+        expected = viewer.texture["selected_mask"].copy()
+        viewer.load()
+        np.testing.assert_array_equal(viewer.refinements[0]["selected_mask"], expected)
+        self.assertIn("source_labels", viewer.refinements[0])
+        self.assertFalse(hasattr(viewer, "selection_tool"))
+
+    def test_automatic_uses_last_source_view_and_cached_glcm_maps(self):
+        import clarius_texture
+        viewer = self.viewer
+        viewer.refinement_mode.set_active(0)
+        with patch("clarius_texture.local_glcm_features", wraps=clarius_texture.local_glcm_features) as calculate:
+            viewer.split_texture()
+            viewer.refinement_mode.set_active(3)
+            self.assertEqual(viewer.texture["source_method"], "local_hybrid_v1")
+            viewer.refinement_mode.set_active(2)
+            viewer.refinement_mode.set_active(3)
+            self.assertEqual(viewer.texture["source_method"], "local_glcm_v2")
+            self.assertEqual(calculate.call_count, 1)
 
     def test_click_keeps_local_patch_instead_of_disconnected_matches(self):
         labels = np.zeros((40, 60), dtype=np.uint8)

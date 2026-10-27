@@ -3,6 +3,8 @@
 import argparse
 import json
 from pathlib import Path
+import time
+from collections import OrderedDict
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, CheckButtons, RadioButtons, RectangleSelector
@@ -15,6 +17,8 @@ from torch.nn import functional as F
 
 from segment_anything import sam_model_registry
 from clarius_texture import analyze_texture
+
+ARRAY_KEYS = ("labels", "selected_mask", "features", "source_labels")
 
 
 def load_rgb(path):
@@ -34,10 +38,13 @@ def load_rgb(path):
 
 
 class Viewer:
-    def __init__(self, model, device, paths, output):
+    def __init__(self, model, device, paths, output, glcm_levels=8, auto_source="combined"):
         self.model, self.device = model, device
         self.paths, self.output = paths, output
         self.index = 0
+        self.glcm_levels, self.auto_source = glcm_levels, auto_source
+        self.embedding_cache = OrderedDict()
+        self._busy = False
         self.fig, self.ax = plt.subplots(figsize=(11, 8))
         self.fig.subplots_adjust(bottom=0.23)
         self.buttons = []
@@ -55,24 +62,34 @@ class Viewer:
         self.mask_button = Button(self.fig.add_axes([0.39, 0.145, 0.23, 0.04]), "Show MedSAM masks")
         self.mask_button.on_clicked(self.show_masks)
         self.refinement_mode = RadioButtons(self.fig.add_axes([0.67, 0.135, 0.23, 0.085]),
-                                             ("Combined", "Brightness", "GLCM"))
-        self.refinement_mode.on_clicked(lambda _: self.split_texture() if self.texture is not None else None)
+                                             ("Combined", "Brightness", "GLCM", "Low / High variation"), active=3)
+        self.refinement_mode.on_clicked(self.change_mode)
         self.connected_only = CheckButtons(self.fig.add_axes([0.12, 0.195, 0.49, 0.025]),
                                             ["Keep clicked connected patch only"], [True])
         self.fig.canvas.mpl_connect("button_press_event", self.pick_texture)
-        self.fig.canvas.mpl_connect("close_event", lambda _: self.save())
+        self.fig.canvas.mpl_connect("close_event", lambda _: self.save() if self._dirty else None)
         self.load()
 
     @torch.inference_mode()
     def load(self):
+        self.texture_cache = {}
+        self._dirty = False
         self.image = load_rgb(self.paths[self.index])
         self.height, self.width = self.image.shape[:2]
-        resized = transform.resize(self.image, (1024, 1024), order=3,
-                                   preserve_range=True, anti_aliasing=True)
-        resized = (resized - resized.min()) / max(float(np.ptp(resized)), 1e-8)
-        tensor = torch.from_numpy(resized.astype(np.float32)).permute(2, 0, 1)[None]
-        print(f"Encoding {self.paths[self.index]} ...", flush=True)
-        self.embedding = self.model.image_encoder(tensor.to(self.device))
+        key = (str(self.paths[self.index].resolve()), self.paths[self.index].stat().st_mtime_ns)
+        if key in self.embedding_cache:
+            self.embedding = self.embedding_cache[key]
+            self.embedding_cache.move_to_end(key)
+        else:
+            resized = transform.resize(self.image, (1024, 1024), order=3,
+                                       preserve_range=True, anti_aliasing=True)
+            resized = (resized - resized.min()) / max(float(np.ptp(resized)), 1e-8)
+            tensor = torch.from_numpy(resized.astype(np.float32)).permute(2, 0, 1)[None]
+            print(f"Encoding {self.paths[self.index]} on {self.device} ...", flush=True)
+            self.embedding = self.model.image_encoder(tensor.to(self.device))
+            self.embedding_cache[key] = self.embedding
+            if len(self.embedding_cache) > 3:
+                self.embedding_cache.popitem(last=False)
         self.regions = []
         self.texture = None
         self.refinements = {}
@@ -91,8 +108,9 @@ class Viewer:
                 for i, record in enumerate(metadata["regions"]):
                     if "texture" in record:
                         self.refinements[i] = dict(record["texture"])
-                        for key in ("labels", "selected_mask", "features"):
-                            self.refinements[i][key] = saved[f"texture_{i}_{key}"].copy()
+                        for key in ARRAY_KEYS:
+                            if f"texture_{i}_{key}" in saved:
+                                self.refinements[i][key] = saved[f"texture_{i}_{key}"].copy()
         if hasattr(self, "selector"):
             self.selector.disconnect_events()
         self.ax.clear()
@@ -132,6 +150,8 @@ class Viewer:
             else:
                 self.regions.append((box.tolist(), mask))
                 self.texture = None
+                self.texture_cache.clear()
+                self._dirty = True
                 self.status.set_text(f"Region {len(self.regions)} added. Review its boundary; Undo removes it.")
             self.redraw()
         except Exception as error:
@@ -149,14 +169,15 @@ class Viewer:
             labels = self.texture["labels"]
             rgba[:] = 0
             for group in range(1, int(labels.max()) + 1):
-                rgba[labels == group] = plt.get_cmap("tab10")(group - 1)
+                color_index = 1 if self.texture.get("method") == "automatic_tissue_v1" else group - 1
+                rgba[labels == group] = plt.get_cmap("tab10")(color_index)
                 rgba[labels == group, 3] = 0.45
             selected = self.texture.get("selected_group")
             if selected is not None:
                 rgba[(labels > 0) & ~self.texture["selected_mask"], 3] = 0.08
             summaries = self.texture.get("group_summaries", [])
             if summaries:
-                self.ax.legend(handles=[Patch(facecolor=plt.get_cmap("tab10")(item["group"] - 1),
+                self.ax.legend(handles=[Patch(facecolor=plt.get_cmap("tab10")(1 if self.texture.get("method") == "automatic_tissue_v1" else item["group"] - 1),
                     label=f"{item['group']}: {item['description']} ({item['fraction_of_parent']:.0%})")
                     for item in summaries], loc="upper right", fontsize=8, framealpha=0.85)
         self.overlay.set_data(rgba)
@@ -165,8 +186,10 @@ class Viewer:
     def undo(self, _=None):
         if self.regions:
             self.regions.pop()
+            self.texture_cache.clear()
             self.refinements.pop(len(self.regions), None)
             self.texture = None
+            self._dirty = True
             self.status.set_text("Last region removed. Save to update the annotation bundle.")
             self.redraw()
 
@@ -178,8 +201,9 @@ class Viewer:
             (0, self.height, self.width), dtype=bool)
         arrays = {"masks": masks}
         for i, refinement in self.refinements.items():
-            for key in ("labels", "selected_mask", "features"):
-                arrays[f"texture_{i}_{key}"] = refinement[key]
+            for key in ARRAY_KEYS:
+                if key in refinement:
+                    arrays[f"texture_{i}_{key}"] = refinement[key]
         np.savez_compressed(self.output / f"{path.name}.regions.npz", **arrays)
         gray = self.image.mean(axis=-1)
         records = []
@@ -191,13 +215,16 @@ class Viewer:
                             "std_display_intensity": float(values.std())})
             if i in self.refinements:
                 records[-1]["texture"] = {key: value for key, value in self.refinements[i].items()
-                                           if key not in ("labels", "selected_mask", "features")}
+                                           if key not in ARRAY_KEYS}
         # Match the full image's presentation in the axes, not the RF sample
         # grid's aspect ratio. Use 2x canvas resolution for a sharper PNG.
         # Never resample annotation arrays or crop the export to a zoomed view.
         self.fig.canvas.draw()
         bounds = self.ax.get_window_extent()
         overlay_shape = (max(1, round(bounds.height * 2)), max(1, round(bounds.width * 2)))
+        if max(overlay_shape) > 2048:
+            factor = 2048 / max(overlay_shape)
+            overlay_shape = tuple(max(1, round(n * factor)) for n in overlay_shape)
         rgba = np.asarray(self.overlay.get_array())
         composite = self.image * (1 - rgba[..., 3:4]) + rgba[..., :3] * rgba[..., 3:4]
         presentation = transform.resize(composite, (*overlay_shape, 3), order=1,
@@ -210,35 +237,80 @@ class Viewer:
         self.output.joinpath(f"{path.name}.regions.json").write_text(json.dumps(metadata, indent=2))
         plt.imsave(self.output / f"{path.name}.overlay.png", np.clip(presentation, 0, 1))
         self.status.set_text(f"Saved {len(records)} regions to {self.output}")
+        self._dirty = False
         self.fig.canvas.draw_idle()
 
     def navigate(self, step):
         index = self.index + step
         if 0 <= index < len(self.paths):
-            self.save()
+            if self._dirty:
+                self.save()
             self.index = index
             self.load()
 
     def split_texture(self, _=None):
+        if self._busy:
+            return
         if not self.regions:
             self.status.set_text("Draw a MedSAM box first.")
             self.fig.canvas.draw_idle()
             return
         mode = self.refinement_mode.value_selected.lower()
+        if mode == "low / high variation":
+            mode = "variation"
+        base_mode = self.auto_source if mode == "variation" else mode
         self.status.set_text(f"Calculating {mode} features inside the latest mask ...")
         self.fig.canvas.draw()
+        self._busy = True
+        start = time.perf_counter()
         try:
-            refinement = analyze_texture(self.image.mean(axis=-1), self.regions[-1][1], method=mode)
+            key = (len(self.regions) - 1, base_mode, self.glcm_levels)
+            if key not in self.texture_cache:
+                shared = None
+                if base_mode in ("combined", "glcm"):
+                    for other in ("combined", "glcm"):
+                        existing = self.texture_cache.get((len(self.regions) - 1, other, self.glcm_levels))
+                        if existing is not None:
+                            maps = existing["features"][..., -8:]
+                            shared = (maps, (maps[..., 2] > 0) & (maps[..., 6] > 0) & self.regions[-1][1])
+                            break
+                self.texture_cache[key] = analyze_texture(self.image.mean(axis=-1), self.regions[-1][1],
+                    method=base_mode, levels=self.glcm_levels, glcm_data=shared)
+            source = self.texture_cache[key]
+            if mode == "variation":
+                auto_key = (*key, "automatic")
+                if auto_key not in self.texture_cache:
+                    self.texture_cache[auto_key] = analyze_texture(self.image.mean(axis=-1), self.regions[-1][1],
+                        method="variation", levels=self.glcm_levels, auto_source=base_mode, source_result=source)
+                refinement = self.texture_cache[auto_key]
+            else:
+                refinement = source
         except ValueError as error:
             self.status.set_text(f"Refinement unavailable: {error}")
             self.fig.canvas.draw_idle()
             return
+        finally:
+            self._busy = False
+        print(f"{mode} ({base_mode}, {self.glcm_levels} levels): {time.perf_counter() - start:.2f}s", flush=True)
         self.texture = refinement
         self.refinements[len(self.regions) - 1] = self.texture
         self.selector.set_active(False)
+        self._dirty = True
         groups = self.texture["actual_groups"]
-        self.status.set_text(f"{mode.capitalize()}: {groups} group(s). Click one to keep it; switch mode to compare.")
+        if mode == "variation":
+            self.status.set_text(f"Automatically kept {int(self.texture['selected_mask'].sum())} pixels from {base_mode}. Save to export.")
+        else:
+            self.status.set_text(f"{mode.capitalize()}: {groups} group(s). Click one to keep it; switch mode to compare.")
         self.redraw()
+
+    def change_mode(self, _=None):
+        if self._busy:
+            return
+        mode = self.refinement_mode.value_selected.lower()
+        if mode in ("combined", "glcm"):
+            self.auto_source = mode
+        if self.texture is not None:
+            self.split_texture()
 
     def pick_texture(self, event):
         if self.texture is None or event.inaxes != self.ax or event.button != 1:
@@ -261,6 +333,7 @@ class Viewer:
             else:
                 self.texture["selection_mode"] = "whole_group"
             self.texture["selected_mask"] = selected
+            self._dirty = True
             self.status.set_text(f"Keeping {int(selected.sum())} pixels from group {group}. Save to export.")
             self.redraw()
 
@@ -277,13 +350,16 @@ def main():
     parser.add_argument("--checkpoint", type=Path, default=Path("medsam_vit_b.pth"))
     parser.add_argument("--device", default="cuda:0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("-o", "--output", type=Path, default=Path("clarius_annotations"))
+    parser.add_argument("--glcm-levels", type=int, choices=(8, 16, 32, 64), default=8)
+    parser.add_argument("--auto-source", choices=("combined", "glcm"), default="combined",
+                        help="Source proposal for automatic Low / High variation refinement")
     args = parser.parse_args()
     paths = sorted(p for p in args.input.iterdir() if p.suffix.lower() in
                    {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}) if args.input.is_dir() else [args.input]
     if not paths or any(not p.is_file() for p in paths):
         parser.error("No input images found")
     model = sam_model_registry["vit_b"](checkpoint=str(args.checkpoint)).to(args.device).eval()
-    viewer = Viewer(model, args.device, paths, args.output)
+    viewer = Viewer(model, args.device, paths, args.output, glcm_levels=args.glcm_levels, auto_source=args.auto_source)
     plt.show()
 
 
