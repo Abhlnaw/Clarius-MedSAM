@@ -12,7 +12,7 @@ import torch
 from torch.nn import functional as F
 
 from segment_anything import sam_model_registry
-from clarius_texture import automatic_window, texture_groups
+from clarius_texture import analyze_texture
 
 
 def load_rgb(path):
@@ -48,7 +48,7 @@ class Viewer:
             button.on_clicked(callback)
             self.buttons.append(button)
         self.status = self.fig.text(0.12, 0.11, "")
-        self.texture_button = Button(self.fig.add_axes([0.12, 0.145, 0.23, 0.04]), "Split latest by texture")
+        self.texture_button = Button(self.fig.add_axes([0.12, 0.145, 0.23, 0.04]), "Split latest by GLCM")
         self.texture_button.on_clicked(self.split_texture)
         self.mask_button = Button(self.fig.add_axes([0.39, 0.145, 0.23, 0.04]), "Show MedSAM masks")
         self.mask_button.on_clicked(self.show_masks)
@@ -200,15 +200,19 @@ class Viewer:
             self.status.set_text("Draw a MedSAM box first.")
             self.fig.canvas.draw_idle()
             return
-        window = list(automatic_window(self.regions[-1][1]))
-        labels, features = texture_groups(self.image.mean(axis=-1), self.regions[-1][1], window)
-        self.texture = {"labels": labels, "features": features, "window_hw_pixels": window,
-                        "window_selection": "automatic_quarter_mask_extent",
-                        "feature_names": ["half_window_mean", "half_window_std", "full_window_mean", "full_window_std"],
-                        "selected_group": None, "selected_mask": np.zeros(labels.shape, dtype=bool)}
+        self.status.set_text("Calculating local GLCM features inside the latest mask ...")
+        self.fig.canvas.draw()
+        try:
+            refinement = analyze_texture(self.image.mean(axis=-1), self.regions[-1][1])
+        except ValueError as error:
+            self.status.set_text(f"GLCM refinement unavailable: {error}")
+            self.fig.canvas.draw_idle()
+            return
+        self.texture = refinement
         self.refinements[len(self.regions) - 1] = self.texture
         self.selector.set_active(False)
-        self.status.set_text("Texture scales chosen automatically. Click a group to keep it; Show MedSAM masks to draw.")
+        groups = self.texture["actual_groups"]
+        self.status.set_text(f"GLCM: {groups} appearance group(s). Click one to keep it; Show MedSAM masks to draw.")
         self.redraw()
 
     def pick_texture(self, event):
