@@ -9,7 +9,7 @@ clc
 set(0, 'DefaultFigureWindowStyle', 'docked');
 
 % Set overall exam directory path
-path = 'C:\Users\abhit\Documents\Hoyt Research\data\exam04'; % change this to current exam
+path = 'C:\Users\abhit\Documents\Hoyt Research\data\exam05'; % change this to current exam
 
 %% 0. Optional: Run Python conversion/decompression only if needed
 rf_files = dir(fullfile(path, '*_rf.raw'));
