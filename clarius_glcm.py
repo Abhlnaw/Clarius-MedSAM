@@ -9,7 +9,7 @@ import numpy as np
 
 PROPERTIES = ("contrast", "homogeneity", "energy", "correlation")
 DEFAULT_OFFSETS = ((0, 1), (1, 1), (1, 0), (1, -1))
-DEFAULT_LEVELS = 16
+DEFAULT_LEVELS = 8
 FEATURE_NAMES = tuple(f"{scale}_glcm_{prop}" for scale in ("half_window", "full_window")
                       for prop in PROPERTIES)
 
