@@ -1,5 +1,9 @@
 # Local GLCM texture refinement
 
+The default **Low / High variation** mode now automatically refines a Combined
+or GLCM proposal using `clarius_auto.py`. The GLCM math below describes the source
+features. See [the current automatic workflow](README.md) for controls and output.
+
 The viewer now defaults to **Combined**: local brightness statistics plus
 lower-weight GLCM descriptors. **Brightness** restores the previous approach,
 and **GLCM** keeps pure co-occurrence analysis. See [the workflow guide](README.md)
@@ -60,8 +64,8 @@ The tests compare the implementation directly with `graycomatrix` and
 ## Processing the selected MedSAM region
 
 1. **Quantize brightness.** The viewer supplies display intensities normalized
-   to `[0,1]`. Map them into 16 gray levels with
-   `min(floor(gray * 16), 15)`. This creates a 16 by 16 histogram instead of a
+   to `[0,1]`. Map them into 8 gray levels with
+   `min(floor(gray * 8), 7)`. This creates a 8 by 8 histogram instead of a
    sparse 256 by 256 one. It reduces computation and small intensity differences,
    but also loses brightness detail. The quantizer is fixed in normalized display
    units; it is not fitted separately to each local neighborhood.
@@ -103,7 +107,7 @@ The tests compare the implementation directly with `graycomatrix` and
 
 The implementation streams gray-level pair histograms through summed-area tables.
 This gives exact rectangular window counts without allocating a separate full
-16 by 16 matrix at every pixel. Computation runs on the CPU; the MedSAM model
+8 by 8 matrix at every pixel. Computation runs on the CPU; the MedSAM model
 can still use CUDA. Larger image regions and more gray levels cost more time.
 
 ## Saved data and compatibility
@@ -173,3 +177,32 @@ the normalized 0..1 scale is called darker or brighter. Variation is called high
 above `1.15 * parent_std + 0.01`, or lower below `0.85 * parent_std - 0.01`. These
 thresholds provide reproducible descriptions, not clinical significance. Groups
 remain a coarse partition; small or rare features can still be merged.
+
+## Automatic spatial refinement
+
+This stage uses a compact source population as an automatic seed rather than
+merging whole groups by one global standard deviation. Candidate shapes are
+opened with radius 9 on a normalized 256 by 256 region grid. The seed score is
+`compact_area / (1 + (MAD_of_local_mean / 0.05)^2)`, with MAD scaled by 1.4826.
+This discourages a large but mixed-intensity group from providing an overly broad
+appearance model. A largest-component fallback is recorded when opening removes
+all candidates.
+
+From the seed, brightness limits are `median - max(2.5*MAD, 0.05)` and
+`median + max(3*MAD, 0.08)`. GLCM/intensity feature deviations are scaled by
+their seed 85th-percentile absolute deviations, bounded per channel, and compared
+with a seed-derived distance threshold. Local speckle standard deviation provides
+an independent compatibility check so one tissue population can cross GLCM color
+boundaries. These are heuristic thresholds in normalized display units.
+
+Compatible evidence forms a spatial scaffold. Dark cavities may be temporarily
+closed only for shape estimation, preventing erosion of a thin tissue rim above
+a hole. Bright interfaces remain barriers. Spatial opening selects the component
+overlapping the automatic seed; a radius-5 envelope bounds recovery, and a
+radius-3 closing repairs small classification gaps. The dark exclusion is then
+reapplied on the native grid, followed by largest-component selection and parent
+mask clipping. Original source labels and learned diagnostics are saved.
+
+The algorithm has no fixed top/bottom cutoff. It still assumes the intended tissue
+is represented by a compact, coherent population in the MedSAM proposal. This
+assumption can fail; it is not an anatomical classifier or clinical validation.
