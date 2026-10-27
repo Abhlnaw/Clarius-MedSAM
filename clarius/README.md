@@ -43,10 +43,11 @@ the window, especially on CPU.
 
 ## Refine an oversized mask using texture
 
-After drawing a box, click **Split latest by texture**. The latest MedSAM region
-is partitioned into up to three appearance groups using local mean and standard
-deviation at half and full window sizes. All local statistics exclude pixels
-outside that region. The original MedSAM mask is preserved.
+After drawing a box, click **Split latest by GLCM**. The latest MedSAM region
+is partitioned into up to three appearance groups using local GLCM contrast,
+homogeneity, energy, and correlation at half and full window sizes. Pair counts
+exclude pixels outside that region or the local window. The original MedSAM mask
+is preserved. See [how GLCM works](GLCM.md) for the complete algorithm and formulas.
 
 Neighborhood sizes are chosen automatically from the selected mask: the larger
 window is approximately one quarter of the occupied region's height and width,
@@ -62,8 +63,11 @@ latest region; Undo that region if you need to work on an earlier one.
 
 Save adds `texture_N_labels`, `texture_N_features`, and `texture_N_selected_mask`
 arrays to the existing NPZ, where N is the zero-based parent region index.
-Labels are zero outside the parent and 1..K inside. JSON records window sizes,
-feature names, and the selected group (null until clicked). The overlay PNG saves
+Labels are 1..K where pair support exists; zero means outside the parent or
+unsupported at either scale. Feature arrays now have eight GLCM channels. JSON
+records method `local_glcm_v1`, quantization, offsets, window sizes, feature names,
+support counts, and the selected group (null until clicked). Older four-feature
+annotations remain readable until explicitly recomputed. The overlay PNG saves
 the current display. These arrays reload with annotations; Split recomputes them
 using the automatic scales. Group IDs are per-region appearance clusters, not
 consistent tissue classes across frames. This can narrow an oversized proposal,
@@ -72,5 +76,5 @@ but will not recover tissue excluded by MedSAM or guarantee an anatomical bounda
 Algorithm checks (in your inference Python environment):
 
 ```powershell
-python -m unittest discover -s tests -p test_clarius_texture.py
+python -m unittest discover -s tests -p "test_clarius_*.py" -v
 ```

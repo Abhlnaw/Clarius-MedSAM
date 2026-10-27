@@ -24,13 +24,13 @@ Grayscale, RGB, and RGBA inputs are converted to three channels. `MedSAM_Inferen
 
 ### Texture refinement inside oversized masks
 
-`clarius_texture.py` analyzes texture only inside the latest MedSAM region. It calculates local mean brightness and standard deviation at two neighborhood sizes, standardizes the four resulting features, and uses deterministic k-means clustering to create up to three appearance groups.
+`clarius_glcm.py` extracts local gray-level co-occurrence matrix (GLCM) features inside the latest MedSAM region. It measures contrast, homogeneity, energy, and correlation at two automatic neighborhood sizes, using 16 gray levels and four pixel-pair directions. `clarius_texture.py` standardizes the eight resulting features and uses fixed-seed k-means clustering to create up to three appearance groups.
 
-Neighborhood sizes are automatic: the larger window is approximately one quarter of the selected region's occupied height and width, and the smaller window is half that size. Pixels outside the mask are excluded from the local statistics.
+Neighborhood sizes are automatic: the larger window is approximately one quarter of the selected region's occupied height and width, and the smaller window is half that size. Only pairs with both endpoints inside the mask and local window contribute. Pixels without pair support are excluded from grouping.
 
-Click **Split latest by texture**, then click a colored group to save it as a refined mask. The original MedSAM mask is retained. A selected group includes all its pixels, including disconnected patches. **Show MedSAM masks** returns to box drawing.
+Click **Split latest by GLCM**, then click a colored group to save it as a refined mask. The original MedSAM mask is retained. A selected group includes all its pixels, including disconnected patches. **Show MedSAM masks** returns to box drawing.
 
-The current implementation uses local intensity statistics, not GLCM. Three groups is a configurable code default, not an anatomical assumption or an automatically estimated number of tissue types.
+Three groups is a configurable code default, not an anatomical assumption or an automatically estimated number of tissue types. Existing four-feature annotations remain readable; splitting again explicitly replaces the latest refinement with GLCM features. See [the GLCM explanation](clarius/GLCM.md) for pair counting, feature formulas, parameters, output format, and limitations.
 
 ## Run the Clarius workflow
 
@@ -71,13 +71,13 @@ The exports retain the RF sample/line grid without scan conversion. Measurements
 
 Texture groups describe appearance, not anatomy or lesions. This workflow does not add automatic lesion detection, manual boundary painting, or tracking between frames. It can refine an oversized candidate mask but cannot recover tissue outside that mask.
 
-`tests/test_clarius_texture.py` checks mask isolation, automatic neighborhood sizing, and constant/empty-region behavior:
+The feature, grouping, and headless viewer tests check GLCM calculations against scikit-image, mask isolation, spatial patterns, automatic scales, selection, save/reload, and legacy annotations:
 
 ```powershell
-python -m unittest discover -s tests -p test_clarius_texture.py
+python -m unittest discover -s tests -p "test_clarius_*.py" -v
 ```
 
-Syntax checks were completed during development. These runtime tests and the interactive workflow still require verification in an environment with the inference dependencies.
+All 18 tests pass. A headless end-to-end smoke test also ran the actual checkpoint on CUDA with an exported Clarius frame; GLCM refinement took about 2.7 seconds for a 49,097-pixel candidate mask. This verifies execution, not anatomical accuracy. See [validation details](clarius/GLCM.md#validation).
 
 ## Attribution
 
