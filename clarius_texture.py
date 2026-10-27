@@ -1,7 +1,7 @@
 """Group local GLCM features within a MedSAM candidate region."""
 
 import numpy as np
-from scipy.ndimage import uniform_filter
+from scipy.ndimage import label as connected_components, uniform_filter
 from clarius_glcm import (DEFAULT_LEVELS, DEFAULT_OFFSETS, FEATURE_NAMES,
                           analysis_windows, local_glcm_features)
 
@@ -91,7 +91,58 @@ def _cluster_features(maps, support, groups, weights=None):
     return result
 
 
-def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, method="glcm"):
+def merge_variation_groups(gray, labels):
+    """Merge existing groups by within-group intensity standard deviation.
+
+    Split at the largest gap between sorted group standard deviations. A gap
+    <=0.005 in normalized intensity is treated as indistinguishable variation.
+    Group 1 is lower variation, group 2 higher; zero stays unsupported/background.
+    The rule is independent of group color, position, or mean brightness.
+    """
+    gray, labels = np.asarray(gray), np.asarray(labels)
+    groups = [int(g) for g in np.unique(labels) if g > 0]
+    if not groups:
+        raise ValueError("No supported texture groups to merge")
+    scores = {g: float(gray[labels == g].std()) for g in groups}
+    ordered = sorted(groups, key=lambda g: (scores[g], g))
+    threshold = None
+    if len(ordered) > 1:
+        gaps = np.diff([scores[g] for g in ordered])
+        index = int(np.argmax(gaps))
+        if gaps[index] > 0.005:
+            threshold = (scores[ordered[index]] + scores[ordered[index + 1]]) / 2
+    mapping = {g: 2 if threshold is not None and scores[g] > threshold else 1 for g in groups}
+    merged = np.zeros(labels.shape, dtype=np.uint8)
+    for group in groups:
+        merged[labels == group] = mapping[group]
+    return merged, mapping, scores, threshold
+
+
+def largest_labeled_region(labels):
+    """Keep the largest 8-connected component across classes, preserving its ID.
+
+    Classes are connected separately, so touching low/high areas never merge.
+    Ties prefer the lower class ID, then its first component in raster order.
+    """
+    best = np.zeros(labels.shape, dtype=bool)
+    best_area, best_group = 0, None
+    for group in sorted(int(g) for g in np.unique(labels) if g > 0):
+        components, count = connected_components(labels == group, structure=np.ones((3, 3)))
+        if not count:
+            continue
+        areas = np.bincount(components.ravel())
+        areas[0] = 0
+        component = int(np.argmax(areas))
+        if areas[component] > best_area:
+            best_area, best_group = int(areas[component]), group
+            best = components == component
+    retained = np.zeros(labels.shape, dtype=np.uint8)
+    if best_group is not None:
+        retained[best] = best_group
+    return retained, best_group
+
+
+def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, method="glcm", glcm_data=None, auto_source="combined", source_result=None):
     """Produce the arrays and reproducibility metadata saved by the viewer.
 
     Groups are a requested maximum, not automatically inferred tissue classes.
@@ -99,6 +150,31 @@ def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, me
     half-window contrast for GLCM, half-window mean for brightness/combined.
     Zero means outside the mask or without local pair support.
     """
+    if method == "variation":
+        from clarius_auto import automatic_tissue_region
+        if auto_source not in ("combined", "glcm"):
+            raise ValueError("Automatic source must be combined or glcm")
+        source = source_result if source_result is not None else analyze_texture(
+            gray, mask, window=window, groups=groups, levels=levels, method=auto_source, glcm_data=glcm_data)
+        selected, diagnostics = automatic_tissue_region(gray, mask, source)
+        if not selected.any():
+            raise ValueError("No coherent tissue region found in this proposal")
+        result = dict(source)
+        result["source_method"] = source["method"]
+        result["source_labels"] = source["labels"].copy()
+        result["source_group_summaries"] = source.get("group_summaries", [])
+        result["method"] = "automatic_tissue_v1"
+        result["labels"] = selected.astype(np.uint8)
+        result["actual_groups"] = 1
+        result["selected_group"] = 1
+        result["selected_mask"] = selected
+        result["selection_mode"] = "automatic_spatial_refinement"
+        result["automatic_refinement"] = diagnostics
+        values = np.asarray(gray)[selected]
+        result["group_summaries"] = [{"group": 1, "description": "automatic tissue region",
+            "area_pixels": int(selected.sum()), "fraction_of_parent": float(selected.sum() / np.count_nonzero(mask)),
+            "mean_display_intensity": float(values.mean()), "std_display_intensity": float(values.std())}]
+        return result
     if method not in ("glcm", "brightness", "combined"):
         raise ValueError("Unknown refinement method")
     gray, mask = np.asarray(gray, dtype=float), np.asarray(mask, dtype=bool)
@@ -114,7 +190,12 @@ def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, me
     if method == "brightness":
         features, support = _intensity_features(gray, mask, window), mask.copy()
     else:
-        features, support = local_glcm_features(gray, mask, window, levels=levels)
+        if glcm_data is None:
+            features, support = local_glcm_features(gray, mask, window, levels=levels)
+        else:
+            features, support = glcm_data
+            if features.shape != (*mask.shape, 8) or support.shape != mask.shape:
+                raise ValueError("Cached GLCM features do not match this image")
         if method == "combined":
             features = np.concatenate((_intensity_features(gray, mask, window), features), axis=-1)
             features[~support] = 0

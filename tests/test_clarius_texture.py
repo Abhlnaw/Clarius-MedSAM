@@ -2,10 +2,59 @@ import unittest
 
 import numpy as np
 
-from clarius_texture import analyze_texture, automatic_window, localized_window, texture_groups
+from clarius_texture import analyze_texture, automatic_window, largest_labeled_region, localized_window, merge_variation_groups, texture_groups
 
 
 class TextureTests(unittest.TestCase):
+    def test_merges_two_low_variation_groups_despite_different_brightness(self):
+        labels = np.repeat(np.arange(1, 4), 100).reshape(10, 30)
+        gray = np.zeros(labels.shape)
+        for group, mean, amplitude in ((1, 0.2, 0.02), (2, 0.8, 0.025), (3, 0.5, 0.2)):
+            gray[labels == group] = mean + amplitude * np.tile([-1, 1], 50)
+        merged, mapping, _, threshold = merge_variation_groups(gray, labels)
+        self.assertEqual(mapping, {1: 1, 2: 1, 3: 2})
+        self.assertIsNotNone(threshold)
+        np.testing.assert_array_equal(merged == 1, (labels == 1) | (labels == 2))
+
+    def test_similar_variation_is_not_forced_into_two_classes(self):
+        labels = np.tile([1, 1, 2, 2, 3, 3], (5, 1))
+        gray = np.tile([0.2, 0.22, 0.5, 0.52, 0.8, 0.82], (5, 1))
+        merged, _, _, threshold = merge_variation_groups(gray, labels)
+        self.assertIsNone(threshold)
+        self.assertTrue(np.all(merged == 1))
+
+    def test_variation_result_preserves_parent_coverage_and_metadata(self):
+        gray = np.random.default_rng(99).random((40, 50))
+        mask = np.zeros(gray.shape, bool)
+        mask[5:35, 5:45] = True
+        result = analyze_texture(gray, mask, method="variation")
+        self.assertEqual(result["method"], "automatic_tissue_v1")
+        self.assertLessEqual(result["actual_groups"], 2)
+        self.assertEqual(result["gray_levels"], 8)
+        self.assertFalse(result["selected_mask"][~mask].any())
+        np.testing.assert_array_equal(result["labels"] > 0, result["selected_mask"])
+        self.assertEqual(result["actual_groups"], 1)
+        self.assertIn("automatic_refinement", result)
+
+    def test_largest_region_removes_detached_islands_and_other_class(self):
+        labels = np.zeros((12, 18), np.uint8)
+        labels[1:6, 1:7] = 1
+        labels[9:11, 1:3] = 1
+        labels[1:5, 10:15] = 2
+        retained, group = largest_labeled_region(labels)
+        self.assertEqual(group, 1)
+        self.assertEqual(np.count_nonzero(retained), 30)
+        self.assertFalse(retained[9:11].any())
+        self.assertFalse(np.any(retained == 2))
+
+    def test_largest_region_can_be_high_variation_even_if_low_total_is_larger(self):
+        labels = np.zeros((15, 20), np.uint8)
+        labels[0:4, 0:4] = 1
+        labels[10:14, 0:4] = 1
+        labels[1:6, 10:15] = 2
+        retained, group = largest_labeled_region(labels)
+        self.assertEqual(group, 2)
+        self.assertEqual(np.count_nonzero(retained), 25)
     def test_automatic_window_uses_region_extent_not_canvas(self):
         mask = np.zeros((200, 300), dtype=bool)
         mask[40:120, 60:100] = True
