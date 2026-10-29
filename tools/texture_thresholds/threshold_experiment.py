@@ -28,7 +28,8 @@ def load_case(folder, frame='frame_001'):
     with np.load(meta_path.with_suffix('.npz'), allow_pickle=False) as saved:
         parent = saved['masks'][0].astype(bool)
         if 'texture_0_source_labels' in saved:
-            proposal = {'labels': saved['texture_0_source_labels'], 'features': saved['texture_0_features']}
+            proposal = {'labels': saved['texture_0_source_labels'], 'features': saved['texture_0_features'],
+                'feature_names': meta['regions'][0]['texture']['feature_names']}
         else:
             from clarius_texture import analyze_texture
             proposal = analyze_texture(image, parent, method='combined', levels=8)
@@ -40,11 +41,14 @@ def load_case(folder, frame='frame_001'):
     previous_profiler = sys.getprofile()
     sys.setprofile(capture)
     try:
-        baseline, diagnostics = automatic_tissue_region(image, parent, proposal)
+        baseline, diagnostics = automatic_tissue_region(image, parent, proposal, correlation_quantile=None)
     finally:
         sys.setprofile(previous_profiler)
     if saved_mask is not None:
-        assert np.array_equal(baseline, saved_mask), 'Baseline differs from saved annotation'
+        saved_quantile = meta['regions'][0]['texture'].get('automatic_refinement', {}).get('correlation_quantile')
+        saved_baseline = baseline if saved_quantile is None else automatic_tissue_region(
+            image, parent, proposal, correlation_quantile=saved_quantile)[0]
+        assert np.array_equal(saved_baseline, saved_mask), 'Baseline differs from saved annotation'
     assert np.array_equal(refine(state, BASE), baseline), 'Experimental reconstruction is not exact'
     return image, parent, state, baseline, diagnostics
 

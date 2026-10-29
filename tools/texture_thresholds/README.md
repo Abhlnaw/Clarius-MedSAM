@@ -1,7 +1,7 @@
 # Texture threshold experiments
 
-These scripts reproduce the exam05 lower-left boundary investigation without
-changing application defaults or existing annotations. They use the project's
+These scripts reproduce the exam05 lower-left boundary investigation using an
+explicit legacy baseline, without modifying existing annotations. They use the project's
 normal Python dependencies; no CUDA inference is needed when parent masks and
 source features have already been saved.
 
@@ -73,7 +73,8 @@ The 98.5% correlation setting increased rough-reference Dice from 0.91566 to
 removes part of the extension, but leaves a visible remainder. On frames
 002-010 it retains 87.6%-93.6% of each full original mask. Without reference
 outlines for those frames, that shrinkage cannot all be counted as improvement;
-some visible holes enlarge. Application defaults remain unchanged.
+some visible holes enlarge. The application now defaults to q0.985; these scripts
+explicitly retain the legacy baseline to reproduce the original investigation.
 
 Binary search does not optimize boundary agreement here: overlap rises and
 falls as a threshold changes, while connectivity operations can change the
