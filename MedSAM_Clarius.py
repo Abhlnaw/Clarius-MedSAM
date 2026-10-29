@@ -17,6 +17,7 @@ from torch.nn import functional as F
 
 from segment_anything import sam_model_registry
 from clarius_texture import analyze_texture
+from clarius_auto import DEFAULT_CORRELATION_QUANTILE, validate_correlation_quantile
 
 ARRAY_KEYS = ("labels", "selected_mask", "features", "source_labels")
 
@@ -38,11 +39,13 @@ def load_rgb(path):
 
 
 class Viewer:
-    def __init__(self, model, device, paths, output, glcm_levels=8, auto_source="combined"):
+    def __init__(self, model, device, paths, output, glcm_levels=8, auto_source="combined",
+                 auto_correlation_quantile=DEFAULT_CORRELATION_QUANTILE):
         self.model, self.device = model, device
         self.paths, self.output = paths, output
         self.index = 0
         self.glcm_levels, self.auto_source = glcm_levels, auto_source
+        self.auto_correlation_quantile = validate_correlation_quantile(auto_correlation_quantile)
         self.embedding_cache = OrderedDict()
         self._busy = False
         self.fig, self.ax = plt.subplots(figsize=(11, 8))
@@ -278,10 +281,11 @@ class Viewer:
                     method=base_mode, levels=self.glcm_levels, glcm_data=shared)
             source = self.texture_cache[key]
             if mode == "variation":
-                auto_key = (*key, "automatic")
+                auto_key = (*key, "automatic", self.auto_correlation_quantile)
                 if auto_key not in self.texture_cache:
                     self.texture_cache[auto_key] = analyze_texture(self.image.mean(axis=-1), self.regions[-1][1],
-                        method="variation", levels=self.glcm_levels, auto_source=base_mode, source_result=source)
+                        method="variation", levels=self.glcm_levels, auto_source=base_mode, source_result=source,
+                        auto_correlation_quantile=self.auto_correlation_quantile)
                 refinement = self.texture_cache[auto_key]
             else:
                 refinement = source
@@ -298,7 +302,9 @@ class Viewer:
         self._dirty = True
         groups = self.texture["actual_groups"]
         if mode == "variation":
-            self.status.set_text(f"Automatically kept {int(self.texture['selected_mask'].sum())} pixels from {base_mode}. Save to export.")
+            gate = self.texture["automatic_refinement"]
+            setting = f", q{gate['correlation_quantile']:.3f}" if gate["correlation_gate_applied"] else ", legacy texture rule"
+            self.status.set_text(f"Automatically kept {int(self.texture['selected_mask'].sum())} pixels from {base_mode}{setting}. Save to export.")
         else:
             self.status.set_text(f"{mode.capitalize()}: {groups} group(s). Click one to keep it; switch mode to compare.")
         self.redraw()
@@ -353,13 +359,17 @@ def main():
     parser.add_argument("--glcm-levels", type=int, choices=(8, 16, 32, 64), default=8)
     parser.add_argument("--auto-source", choices=("combined", "glcm"), default="combined",
                         help="Source proposal for automatic Low / High variation refinement")
+    parser.add_argument("--auto-correlation-quantile", type=validate_correlation_quantile,
+                        default=DEFAULT_CORRELATION_QUANTILE,
+                        help="Automatic seed correlation-distance quantile (default: 0.985; 0 disables it)")
     args = parser.parse_args()
     paths = sorted(p for p in args.input.iterdir() if p.suffix.lower() in
                    {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}) if args.input.is_dir() else [args.input]
     if not paths or any(not p.is_file() for p in paths):
         parser.error("No input images found")
     model = sam_model_registry["vit_b"](checkpoint=str(args.checkpoint)).to(args.device).eval()
-    viewer = Viewer(model, args.device, paths, args.output, glcm_levels=args.glcm_levels, auto_source=args.auto_source)
+    viewer = Viewer(model, args.device, paths, args.output, glcm_levels=args.glcm_levels, auto_source=args.auto_source,
+                    auto_correlation_quantile=args.auto_correlation_quantile)
     plt.show()
 
 

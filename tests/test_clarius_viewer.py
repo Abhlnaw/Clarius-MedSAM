@@ -95,12 +95,34 @@ class ViewerTests(unittest.TestCase):
         self.assertEqual(viewer.texture["source_method"], "local_hybrid_v1")
         self.assertTrue(viewer.texture["selected_mask"].any())
         self.assertFalse(viewer.texture["selected_mask"][~viewer.regions[0][1]].any())
+        self.assertIn("q0.985", viewer.status.get_text())
         viewer.save()
         expected = viewer.texture["selected_mask"].copy()
         viewer.load()
         np.testing.assert_array_equal(viewer.refinements[0]["selected_mask"], expected)
         self.assertIn("source_labels", viewer.refinements[0])
+        diagnostics = viewer.refinements[0]["automatic_refinement"]
+        self.assertTrue(diagnostics["correlation_gate_applied"])
+        self.assertEqual(diagnostics["correlation_quantile"], 0.985)
         self.assertFalse(hasattr(viewer, "selection_tool"))
+
+    def test_quantile_switch_reuses_features_but_not_automatic_result(self):
+        import clarius_texture
+        viewer = self.viewer
+        with patch("clarius_texture.local_glcm_features", wraps=clarius_texture.local_glcm_features) as calculate:
+            viewer.split_texture()
+            first = viewer.texture
+            viewer.auto_correlation_quantile = 0.980
+            viewer.split_texture()
+            self.assertIsNot(viewer.texture, first)
+            self.assertEqual(viewer.texture['automatic_refinement']['correlation_quantile'], 0.980)
+            viewer.auto_correlation_quantile = None
+            viewer.split_texture()
+            self.assertFalse(viewer.texture['automatic_refinement']['correlation_gate_applied'])
+            viewer.auto_correlation_quantile = 0.985
+            viewer.split_texture()
+            self.assertIs(viewer.texture, first)
+            self.assertEqual(calculate.call_count, 1)
 
     def test_automatic_uses_last_source_view_and_cached_glcm_maps(self):
         import clarius_texture
