@@ -206,3 +206,16 @@ mask clipping. Original source labels and learned diagnostics are saved.
 The algorithm has no fixed top/bottom cutoff. It still assumes the intended tissue
 is represented by a compact, coherent population in the MedSAM proposal. This
 assumption can fail; it is not an anatomical classifier or clinical validation.
+
+## Investigating boundary leakage
+
+The current compatibility rule accepts a pixel if its feature distance, source
+group, **or** speckle statistics match. Tightening feature distance alone can
+therefore leave a connected extension unchanged. Making a texture threshold
+mandatory can remove spillover while also discarding wanted tissue.
+
+The [local threshold experiments](../tools/texture_thresholds/README.md) reproduce
+the exam05 investigation, including feature-specific sweeps and five-frame
+comparisons. Correlation thresholds partially improved the lower-left extension,
+but also enlarged some holes. These experiments leave the viewer's defaults
+unchanged; their data and generated images stay outside Git.
