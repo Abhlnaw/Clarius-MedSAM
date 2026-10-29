@@ -79,6 +79,50 @@ class AutomaticTests(unittest.TestCase):
         self.assertGreater(first.mean(), 0.95)
         self.assertTrue(np.isfinite(diagnostics["texture_distance_threshold"]))
 
+    def test_correlation_gate_cannot_be_bypassed_by_similar_speckle(self):
+        gray, parent, proposal, cavity = tissue_case()
+        proposal['feature_names'] = ['half_window_glcm_correlation', 'full_window_glcm_correlation']
+        proposal['features'][35:55, 50:80] = 0.95
+        legacy, legacy_info = automatic_tissue_region(gray, parent, proposal, correlation_quantile=0)
+        selected, info = automatic_tissue_region(gray, parent, proposal)
+        self.assertTrue(legacy[45, 65])
+        self.assertFalse(selected[45, 65])
+        self.assertTrue(info['correlation_gate_applied'])
+        self.assertEqual(info['correlation_quantile'], 0.985)
+        self.assertEqual(info['compatibility_rule'], 'seed_correlation_quantile')
+        self.assertFalse(legacy_info['correlation_gate_applied'])
+        self.assertFalse(selected[~parent].any())
+        self.assertFalse(selected[90, 110])
+        self.assertLess(selected[cavity].mean(), 0.1)
+
+    def test_correlation_channels_are_selected_by_name_in_both_feature_layouts(self):
+        gray, parent, proposal, _ = tissue_case()
+        proposal['feature_names'] = ['half_window_glcm_correlation', 'full_window_glcm_correlation']
+        proposal['features'][35:55, 50:80] = 0.95
+        expected, _ = automatic_tissue_region(gray, parent, proposal)
+        # Add unrelated channels and reverse correlation-channel order.
+        features = proposal['features']
+        proposal['features'] = np.stack([gray, features[..., 1], gray * 0, features[..., 0]], axis=-1)
+        proposal['feature_names'] = ['mean', 'full_window_glcm_correlation', 'std', 'half_window_glcm_correlation']
+        actual, info = automatic_tissue_region(gray, parent, proposal)
+        np.testing.assert_array_equal(actual, expected)
+        self.assertTrue(info['correlation_gate_applied'])
+
+    def test_named_constant_correlations_remain_finite(self):
+        gray = np.full((30, 40), 0.5)
+        parent = np.ones(gray.shape, bool)
+        source = {'labels': parent.astype(np.uint8), 'features': np.zeros((*gray.shape, 2)),
+            'feature_names': ['half_window_glcm_correlation', 'full_window_glcm_correlation']}
+        selected, info = automatic_tissue_region(gray, parent, source)
+        self.assertGreater(selected.mean(), 0.95)
+        self.assertEqual(info['correlation_distance_threshold'], 0.0)
+
+    def test_invalid_quantiles_are_rejected(self):
+        gray, parent, proposal, _ = tissue_case()
+        for q in [-0.1, 1.01, float('nan'), float('inf')]:
+            with self.subTest(q=q), self.assertRaisesRegex(ValueError, 'Correlation quantile'):
+                automatic_tissue_region(gray, parent, proposal, correlation_quantile=q)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,7 @@ import numpy as np
 from scipy.ndimage import label as connected_components, uniform_filter
 from clarius_glcm import (DEFAULT_LEVELS, DEFAULT_OFFSETS, FEATURE_NAMES,
                           analysis_windows, local_glcm_features)
+from clarius_auto import DEFAULT_CORRELATION_QUANTILE
 
 
 def automatic_window(mask):
@@ -142,7 +143,8 @@ def largest_labeled_region(labels):
     return retained, best_group
 
 
-def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, method="glcm", glcm_data=None, auto_source="combined", source_result=None):
+def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, method="glcm", glcm_data=None, auto_source="combined", source_result=None,
+                    auto_correlation_quantile=DEFAULT_CORRELATION_QUANTILE):
     """Produce the arrays and reproducibility metadata saved by the viewer.
 
     Groups are a requested maximum, not automatically inferred tissue classes.
@@ -156,7 +158,8 @@ def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, me
             raise ValueError("Automatic source must be combined or glcm")
         source = source_result if source_result is not None else analyze_texture(
             gray, mask, window=window, groups=groups, levels=levels, method=auto_source, glcm_data=glcm_data)
-        selected, diagnostics = automatic_tissue_region(gray, mask, source)
+        selected, diagnostics = automatic_tissue_region(gray, mask, source,
+            correlation_quantile=auto_correlation_quantile)
         if not selected.any():
             raise ValueError("No coherent tissue region found in this proposal")
         result = dict(source)

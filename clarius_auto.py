@@ -9,6 +9,19 @@ from scipy import ndimage as ndi
 from skimage import transform
 
 
+DEFAULT_CORRELATION_QUANTILE = 0.985
+
+
+def validate_correlation_quantile(value):
+    """Validate a seed-distance quantile; zero/None disables the gate."""
+    if value is None:
+        return None
+    value = float(value)
+    if not np.isfinite(value) or not 0 <= value <= 1:
+        raise ValueError("Correlation quantile must be between 0 and 1 (0 disables it)")
+    return value if value > 0 else None
+
+
 def _largest(mask):
     components, count = ndi.label(mask, structure=np.ones((3, 3)))
     if not count:
@@ -23,14 +36,18 @@ def _disk(radius):
     return x * x + y * y <= radius * radius
 
 
-def automatic_tissue_region(gray, parent, proposal):
+def automatic_tissue_region(gray, parent, proposal,
+                            correlation_quantile=DEFAULT_CORRELATION_QUANTILE):
     """Return a native-grid mask and reproducibility diagnostics, without clicks.
 
     Opening suppresses narrow bridges/tails before candidate selection. Texture
     evidence can recover missing compatible tissue in a limited spatial envelope.
     Dark cavities are explicitly protected from closing; holes are never filled
     unconditionally. All output remains inside the original MedSAM mask.
+    The correlation gate uses the seed-distance quantile, not a raw correlation
+    coefficient cutoff. Pass None or 0 to recover the earlier acceptance rule.
     """
+    quantile = validate_correlation_quantile(correlation_quantile)
     gray, parent = np.asarray(gray, float), np.asarray(parent, bool)
     labels = np.asarray(proposal["labels"])
     features = np.asarray(proposal["features"])
@@ -105,6 +122,20 @@ def automatic_tissue_region(gray, parent, proposal):
     std_low, std_high = np.quantile(local_std[seed], (0.05, 0.95))
     similar_speckle = (local_std >= std_low * 0.7) & (local_std <= std_high * 1.4 + 0.005)
     compatible = ((distance <= threshold) | (labels[crop] == group) | similar_speckle)
+    names = list(proposal.get("feature_names", []))
+    if names and len(names) != features.shape[-1]:
+        raise ValueError("Feature names do not match the proposal channels")
+    correlation_names = [f"{scale}_glcm_correlation" for scale in ("half_window", "full_window")]
+    correlation_threshold = None
+    correlation_applied = quantile is not None and all(name in names for name in correlation_names)
+    if correlation_applied:
+        indices = [names.index(name) for name in correlation_names]
+        # Match the tested two-scale correlation distance. Source labels and
+        # speckle similarity cannot bypass this appearance gate.
+        correlation_distance = np.mean(np.minimum(np.abs(
+            (native_features[..., indices] - center[indices]) / scale[indices]), 3) ** 2, axis=-1)
+        correlation_threshold = float(np.quantile(correlation_distance[seed], quantile))
+        compatible = correlation_distance <= correlation_threshold
     compatible &= (mean >= lower) & (mean <= upper) & parent[crop]
     small_compatible = transform.resize(compatible.astype(float), shape, order=0,
                                         preserve_range=True, anti_aliasing=False) > 0.5
@@ -140,5 +171,10 @@ def automatic_tissue_region(gray, parent, proposal):
         "protected_dark_threshold": lower, "bright_rejection_threshold": upper,
         "texture_distance_threshold": threshold, "opening_fallback": fallback,
         "seed_local_std_range": [float(std_low), float(std_high)],
+        "correlation_quantile": quantile,
+        "correlation_gate_applied": correlation_applied,
+        "correlation_distance_threshold": correlation_threshold,
+        "correlation_feature_names": correlation_names if correlation_applied else [],
+        "compatibility_rule": "seed_correlation_quantile" if correlation_applied else "feature_or_source_or_speckle",
         "candidate_scores": candidate_stats,
         "selected_pixels": int(selected.sum())}
