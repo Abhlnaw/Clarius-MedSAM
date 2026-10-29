@@ -150,7 +150,7 @@ mask, and a single group need not match a complete anatomical structure.
 python -m unittest discover -s tests -p "test_clarius_*.py" -v
 ```
 
-The 24 tests cover reference GLCMs, known constant/checkerboard patterns,
+The tests cover reference GLCMs, known constant/checkerboard patterns,
 directions and offsets, mask holes, edges, invalid input, unsupported pixels,
 automatic window sizing, deterministic grouping of spatially different patterns,
 and headless viewer selection, save/reload, undo, and legacy annotations.
@@ -191,9 +191,13 @@ all candidates.
 From the seed, brightness limits are `median - max(2.5*MAD, 0.05)` and
 `median + max(3*MAD, 0.08)`. GLCM/intensity feature deviations are scaled by
 their seed 85th-percentile absolute deviations, bounded per channel, and compared
-with a seed-derived distance threshold. Local speckle standard deviation provides
-an independent compatibility check so one tissue population can cross GLCM color
-boundaries. These are heuristic thresholds in normalized display units.
+with a seed-derived distance threshold in the legacy rule. The default now uses
+the two correlation channels as the appearance gate: their squared normalized
+deviations, bounded at 9 per channel, are averaged and compared with the seed's
+98.5th-percentile distance. Channels are selected by name for either Combined
+or pure GLCM. Source labels and speckle similarity cannot bypass that gate.
+Brightness bounds and spatial cleanup still apply. These are heuristic
+thresholds in normalized display units.
 
 Compatible evidence forms a spatial scaffold. Dark cavities may be temporarily
 closed only for shape estimation, preventing erosion of a thin tissue rim above
@@ -209,7 +213,7 @@ assumption can fail; it is not an anatomical classifier or clinical validation.
 
 ## Investigating boundary leakage
 
-The current compatibility rule accepts a pixel if its feature distance, source
+The legacy compatibility rule accepts a pixel if its feature distance, source
 group, **or** speckle statistics match. Tightening feature distance alone can
 therefore leave a connected extension unchanged. Making a texture threshold
 mandatory can remove spillover while also discarding wanted tissue.
@@ -217,5 +221,16 @@ mandatory can remove spillover while also discarding wanted tissue.
 The [local threshold experiments](../tools/texture_thresholds/README.md) reproduce
 the exam05 investigation, including feature-specific sweeps and five-frame
 comparisons. Correlation thresholds partially improved the lower-left extension,
-but also enlarged some holes. These experiments leave the viewer's defaults
-unchanged; their data and generated images stay outside Git.
+but also enlarged some holes. The viewer now defaults to the tested q0.985
+correlation-distance rule; `--auto-correlation-quantile 0` restores the legacy
+rule, and `--auto-correlation-quantile 0.980` selects the tighter comparison.
+The quantile is not a raw correlation cutoff. Values must be in [0, 1], with
+zero meaning disabled. Lower quantiles need not improve anatomical agreement.
+
+Saved diagnostics record `correlation_quantile`, `correlation_gate_applied`,
+`correlation_distance_threshold`, `correlation_feature_names`, and the
+`compatibility_rule`. Older annotations remain readable and keep their original
+mask until recomputed. Proposals without named correlation channels use the
+legacy rule and record that the correlation gate was not applied. Experiment
+scripts explicitly use the legacy baseline so historical comparisons remain
+reproducible; their data and generated images stay outside Git.

@@ -28,6 +28,12 @@ The **Low / High variation** mode now automatically finds a coherent tissue regi
 
 Combined is the default source; select GLCM before returning to the automatic mode, or use `--auto-source glcm`. The default quantization is eight gray levels; `--glcm-levels 16`, `32`, or `64` is available. Higher levels cost substantially more CPU time.
 
+Automatic refinement now uses the tested **q0.985 correlation-distance** gate.
+Use `--auto-correlation-quantile 0.980` for a tighter comparison, or `0` for the
+previous acceptance rule. Existing saved selections need **Split latest
+region** again to apply the setting; a separate output folder keeps comparisons
+separate. See [settings and limits](clarius/README.md#settings-and-performance).
+
 The original MedSAM masks and source labels are retained alongside the automatic result. GLCM maps, automatic results, and recent image embeddings are cached. The manual correction tools from the rejected iteration have been removed. See [the current workflow](clarius/README.md) and [algorithm details](clarius/GLCM.md).
 
 ## Run the Clarius workflow

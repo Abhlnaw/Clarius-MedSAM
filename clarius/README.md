@@ -35,7 +35,7 @@ The new algorithm in `clarius_auto.py` instead:
 - Finds compact candidate bodies within the source proposal, suppressing narrow bridges and tails before comparing them.
 - Scores candidate area with a penalty for dispersion of local mean intensity, so a large mixed population does not automatically win.
 - Learns robust brightness and texture ranges from that automatic seed.
-- Recovers compatible tissue across source colors using GLCM descriptors and local speckle variation.
+- Recovers tissue across source colors using the seed's two-scale GLCM correlation-distance range (q0.985 by default).
 - Uses spatial opening and a bounded boundary envelope to limit lower ribbons and distant spillover.
 - Keeps the component attached to the automatic seed, then the largest final component.
 - Reapplies a dark-cavity exclusion after cleanup, rather than indiscriminately filling holes. The final mask always remains inside the parent MedSAM mask.
@@ -47,6 +47,25 @@ Source groups still describe appearance, not anatomy. The method is an automatic
 ## Settings and performance
 
 `--glcm-levels` accepts 8 (default), 16, 32, or 64. Increasing levels substantially increases CPU GLCM cost. MedSAM encoding runs on the requested device; GLCM and spatial refinement run on CPU.
+
+`--auto-correlation-quantile` defaults to **0.985** in automatic Low / High
+variation mode, for either Combined or GLCM as the source. It sets a percentile
+of the seed's normalized correlation-feature distance, not a raw correlation
+coefficient of 0.985. Higher quantiles are generally more permissive. Use
+`--auto-correlation-quantile 0.980` to compare a tighter setting, or
+`--auto-correlation-quantile 0` for the earlier feature/source/speckle rule.
+Inspection modes retain their usual clustering behavior.
+
+The status and saved `automatic_refinement` metadata identify the setting used.
+Existing annotations are loaded as saved; click **Split latest region** again
+to apply the new default, then Save, or use a fresh output folder such as
+`--output .\clarius_annotations\exam05_q0985` to compare results.
+
+On the investigated exam05 frame, q0.985 removed about 42% of the current
+spillover relative to the approximate red outline while retaining about 97% of
+the current selection inside it. The lower-left extension remains partly
+present, and some holes enlarge on other frames. This setting is an appearance
+heuristic and still needs review on different acquisitions.
 
 The viewer caches up to three image embeddings, shares GLCM maps between Combined and GLCM, and caches automatic results. Revisiting a proposal avoids recalculating its features. Creating a new parent region invalidates texture caches.
 
