@@ -5,6 +5,8 @@ from scipy.ndimage import label as connected_components, uniform_filter
 from clarius_glcm import (DEFAULT_LEVELS, DEFAULT_OFFSETS, FEATURE_NAMES,
                           analysis_windows, local_glcm_features)
 from clarius_auto import DEFAULT_CORRELATION_QUANTILE
+from clarius_glszm import (DEFAULT_STEP as GLSZM_DEFAULT_STEP,
+                          FEATURE_NAMES as GLSZM_FEATURE_NAMES, local_glszm_features)
 
 
 def automatic_window(mask):
@@ -144,7 +146,8 @@ def largest_labeled_region(labels):
 
 
 def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, method="glcm", glcm_data=None, auto_source="combined", source_result=None,
-                    auto_correlation_quantile=DEFAULT_CORRELATION_QUANTILE):
+                    auto_correlation_quantile=DEFAULT_CORRELATION_QUANTILE,
+                    glszm_data=None, glszm_step=GLSZM_DEFAULT_STEP):
     """Produce the arrays and reproducibility metadata saved by the viewer.
 
     Groups are a requested maximum, not automatically inferred tissue classes.
@@ -154,10 +157,11 @@ def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, me
     """
     if method == "variation":
         from clarius_auto import automatic_tissue_region
-        if auto_source not in ("combined", "glcm"):
-            raise ValueError("Automatic source must be combined or glcm")
+        if auto_source not in ("combined", "glcm", "glszm", "combined_glszm"):
+            raise ValueError("Automatic source must be combined, glcm, glszm, or combined_glszm")
         source = source_result if source_result is not None else analyze_texture(
-            gray, mask, window=window, groups=groups, levels=levels, method=auto_source, glcm_data=glcm_data)
+            gray, mask, window=window, groups=groups, levels=levels, method=auto_source,
+            glcm_data=glcm_data, glszm_data=glszm_data, glszm_step=glszm_step)
         selected, diagnostics = automatic_tissue_region(gray, mask, source,
             correlation_quantile=auto_correlation_quantile)
         if not selected.any():
@@ -178,7 +182,7 @@ def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, me
             "area_pixels": int(selected.sum()), "fraction_of_parent": float(selected.sum() / np.count_nonzero(mask)),
             "mean_display_intensity": float(values.mean()), "std_display_intensity": float(values.std())}]
         return result
-    if method not in ("glcm", "brightness", "combined"):
+    if method not in ("glcm", "brightness", "combined", "glszm", "combined_glszm"):
         raise ValueError("Unknown refinement method")
     gray, mask = np.asarray(gray, dtype=float), np.asarray(mask, dtype=bool)
     if gray.ndim != 2 or gray.shape != mask.shape or not mask.any():
@@ -190,8 +194,23 @@ def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, me
         window = automatic_window(mask) if method == "brightness" else localized_window(mask)
     names = [f"{scale}_{prop}" for scale in ("half_window", "full_window") for prop in ("mean", "std")]
     weights = None
+    is_glszm = method in ("glszm", "combined_glszm")
     if method == "brightness":
         features, support = _intensity_features(gray, mask, window), mask.copy()
+    elif is_glszm:
+        if glszm_data is None:
+            features, support = local_glszm_features(gray, mask, window, levels=levels, step=glszm_step)
+        else:
+            features, support = glszm_data
+            if features.shape != (*mask.shape, 16) or support.shape != mask.shape:
+                raise ValueError("Cached GLSZM features do not match this image")
+        if method == "combined_glszm":
+            features = np.concatenate((_intensity_features(gray, mask, window), features), axis=-1)
+            features[~support] = 0
+            names += list(GLSZM_FEATURE_NAMES)
+            weights = np.array([1 / np.sqrt(2), 0.25] * 2 + [0.35 / np.sqrt(16)] * 16)
+        else:
+            names = list(GLSZM_FEATURE_NAMES)
     else:
         if glcm_data is None:
             features, support = local_glcm_features(gray, mask, window, levels=levels)
@@ -208,9 +227,16 @@ def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, me
             weights = np.array([1 / np.sqrt(2), 0.25] * 2 + [0.35 / np.sqrt(8)] * 8)
         else:
             names = list(FEATURE_NAMES)
-    labels = _cluster_features(features, support, groups, weights=weights)
+    cluster_maps = features
+    if is_glszm:
+        # Zone area/variance have wide positive ranges. Keep saved maps raw,
+        # but compress these ranges before z-scoring for deterministic k-means.
+        cluster_maps = features.copy()
+        cluster_maps[..., -16:] = np.log1p(cluster_maps[..., -16:])
+    labels = _cluster_features(cluster_maps, support, groups, weights=weights)
     result = {"method": {"glcm": "local_glcm_v2", "brightness": "local_intensity_v1",
-                          "combined": "local_hybrid_v1"}[method],
+                          "combined": "local_hybrid_v1", "glszm": "local_glszm_v1",
+                          "combined_glszm": "local_hybrid_glszm_v1"}[method],
             "labels": labels, "features": features,
             "feature_names": names, "window_hw_pixels": list(window),
             "analysis_windows_hw_pixels": [list(w) for w in analysis_windows(window)],
@@ -228,6 +254,13 @@ def analyze_texture(gray, mask, window=None, groups=3, levels=DEFAULT_LEVELS, me
     if method == "brightness":
         for key in ("gray_levels", "quantization", "offsets_dy_dx", "symmetric", "direction_aggregation"):
             result.pop(key)
+    if is_glszm:
+        for key in ("offsets_dy_dx", "symmetric", "direction_aggregation"):
+            result.pop(key)
+        result.update({"zone_connectivity": 8, "zone_scope": "independent_mask_clipped_window",
+            "sampling_step_hw": list(glszm_step),
+            "feature_interpolation": "none" if tuple(glszm_step) == (1, 1) else "mask_normalized_bilinear",
+            "feature_transform_before_clustering": "log1p_glszm_channels_then_zscore"})
     parent_mean = float(gray[mask].mean())
     parent_std = float(gray[mask].std())
     summaries = []

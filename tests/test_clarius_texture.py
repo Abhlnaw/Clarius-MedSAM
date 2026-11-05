@@ -6,6 +6,26 @@ from clarius_texture import analyze_texture, automatic_window, largest_labeled_r
 
 
 class TextureTests(unittest.TestCase):
+    def test_glszm_proposals_and_automatic_mode_keep_raw_maps_and_metadata(self):
+        gray=np.random.default_rng(12).random((22,28)); mask=np.zeros(gray.shape,bool);mask[2:20,3:25]=True
+        pure=analyze_texture(gray,mask,window=(9,7),method='glszm',glszm_step=(2,2))
+        self.assertEqual(pure['features'].shape,(22,28,16))
+        self.assertEqual(pure['zone_connectivity'],8)
+        self.assertNotIn('offsets_dy_dx',pure)
+        self.assertFalse(pure['features'][~mask].any())
+        combined=analyze_texture(gray,mask,window=(9,7),method='combined_glszm',glszm_step=(2,2),
+            glszm_data=(pure['features'],pure['labels']>0))
+        np.testing.assert_array_equal(combined['features'][...,-16:],pure['features'])
+        self.assertEqual(combined['features'].shape[-1],20)
+        self.assertEqual(combined['feature_transform_before_clustering'],'log1p_glszm_channels_then_zscore')
+        auto=analyze_texture(gray,mask,method='variation',auto_source='glszm',source_result=pure)
+        info=auto['automatic_refinement']
+        self.assertTrue(info['distance_gate_applied'])
+        self.assertEqual(info['distance_gate_family'],'glszm')
+        self.assertFalse(info['correlation_gate_applied'])
+        self.assertEqual(info['distance_gate_quantile'],.985)
+        self.assertFalse(auto['selected_mask'][~mask].any())
+
     def test_merges_two_low_variation_groups_despite_different_brightness(self):
         labels = np.repeat(np.arange(1, 4), 100).reshape(10, 30)
         gray = np.zeros(labels.shape)

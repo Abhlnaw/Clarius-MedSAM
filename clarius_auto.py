@@ -44,8 +44,9 @@ def automatic_tissue_region(gray, parent, proposal,
     evidence can recover missing compatible tissue in a limited spatial envelope.
     Dark cavities are explicitly protected from closing; holes are never filled
     unconditionally. All output remains inside the original MedSAM mask.
-    The correlation gate uses the seed-distance quantile, not a raw correlation
-    coefficient cutoff. Pass None or 0 to recover the earlier acceptance rule.
+    GLCM uses its two correlation channels; GLSZM uses its named local channels.
+    The quantile applies to seed-normalized feature distance, not a raw feature
+    cutoff. Pass None or 0 to recover the earlier acceptance rule.
     """
     quantile = validate_correlation_quantile(correlation_quantile)
     gray, parent = np.asarray(gray, float), np.asarray(parent, bool)
@@ -128,14 +129,22 @@ def automatic_tissue_region(gray, parent, proposal,
     correlation_names = [f"{scale}_glcm_correlation" for scale in ("half_window", "full_window")]
     correlation_threshold = None
     correlation_applied = quantile is not None and all(name in names for name in correlation_names)
-    if correlation_applied:
-        indices = [names.index(name) for name in correlation_names]
-        # Match the tested two-scale correlation distance. Source labels and
-        # speckle similarity cannot bypass this appearance gate.
-        correlation_distance = np.mean(np.minimum(np.abs(
+    glszm_names = [name for name in names if "_glszm_" in name]
+    gate_names = correlation_names if all(name in names for name in correlation_names) else glszm_names
+    gate_family = "glcm_correlation" if gate_names == correlation_names else "glszm"
+    gate_applied = quantile is not None and bool(gate_names)
+    gate_threshold = None
+    if gate_applied:
+        indices = [names.index(name) for name in gate_names]
+        # GLCM retains its tested two-scale correlation distance. GLSZM uses
+        # the same distance construction across its local descriptors. Source
+        # labels and speckle similarity cannot bypass either appearance gate.
+        gate_distance = np.mean(np.minimum(np.abs(
             (native_features[..., indices] - center[indices]) / scale[indices]), 3) ** 2, axis=-1)
-        correlation_threshold = float(np.quantile(correlation_distance[seed], quantile))
-        compatible = correlation_distance <= correlation_threshold
+        gate_threshold = float(np.quantile(gate_distance[seed], quantile))
+        compatible = gate_distance <= gate_threshold
+        if correlation_applied:
+            correlation_threshold = gate_threshold
     compatible &= (mean >= lower) & (mean <= upper) & parent[crop]
     small_compatible = transform.resize(compatible.astype(float), shape, order=0,
                                         preserve_range=True, anti_aliasing=False) > 0.5
@@ -175,6 +184,10 @@ def automatic_tissue_region(gray, parent, proposal,
         "correlation_gate_applied": correlation_applied,
         "correlation_distance_threshold": correlation_threshold,
         "correlation_feature_names": correlation_names if correlation_applied else [],
-        "compatibility_rule": "seed_correlation_quantile" if correlation_applied else "feature_or_source_or_speckle",
+        "distance_gate_applied": gate_applied, "distance_gate_family": gate_family if gate_applied else None,
+        "distance_gate_quantile": quantile, "distance_gate_threshold": gate_threshold,
+        "distance_gate_feature_names": gate_names if gate_applied else [],
+        "compatibility_rule": ("seed_correlation_quantile" if correlation_applied else "seed_glszm_quantile")
+            if gate_applied else "feature_or_source_or_speckle",
         "candidate_scores": candidate_stats,
         "selected_pixels": int(selected.sum())}
