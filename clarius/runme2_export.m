@@ -4,12 +4,14 @@
 close all
 clear all
 clc
+addpath(fileparts(mfilename('fullpath')));
 
 % Dock figures as tabs in a single window
 set(0, 'DefaultFigureWindowStyle', 'docked');
 
 % Set overall exam directory path
 path = 'C:\Users\abhit\Documents\Hoyt Research\data\exam05'; % change this to current exam
+exportLegacyRF = false; % optional older RF export; preferred export uses ENV below
 
 %% 0. Optional: Run Python conversion/decompression only if needed
 rf_files = dir(fullfile(path, '*_rf.raw'));
@@ -60,8 +62,8 @@ if ~isempty(rf_files)
     z_axis_rf = linspace(0, depth_mm, header.samples);
     
     % --- CREATE FOLDER FOR PNG EXPORTS ---
-    imgFolder = fullfile(path, 'exported_images');
-    if ~exist(imgFolder, 'dir')
+    imgFolder = fullfile(path, 'exported_images_rf_legacy');
+    if exportLegacyRF && ~exist(imgFolder, 'dir')
         mkdir(imgFolder);
     end
     
@@ -96,6 +98,7 @@ if ~isempty(rf_files)
         % Export underlying B-mode pixels, without axes or screen scaling.
         % Match imagesc's per-frame display range; avoid the unused fixed
         % 15..70 range, which may clip the RF-derived values to black.
+        if exportLegacyRF
         limits = [min(BB(:)), max(BB(:))];
         BB_norm = (BB - limits(1)) / max(limits(2) - limits(1), eps);
         imgName = sprintf('frame_%03d.png', i);
@@ -110,9 +113,12 @@ if ~isempty(rf_files)
         end
         fprintf(fidMetadata, '%s', jsonencode(metadata));
         fclose(fidMetadata);
+        end
 
     end
-    fprintf('Done! Saved %d images to: %s\n', numFrames, imgFolder);
+    if exportLegacyRF
+        fprintf('Saved %d legacy RF images to: %s\n', numFrames, imgFolder);
+    end
 else
     warning('No *_rf.raw file found in path: %s', path);
 end
@@ -137,11 +143,16 @@ if ~isempty(env_files)
     
     figure('Name', 'Clarius Envelope Data');
     colormap(gray)
+    envFolder = fullfile(path, 'exported_images_env_gamma08');
+    if ~isfolder(envFolder), mkdir(envFolder); end
     
     for i = 1:numFrames
-        BB = squeeze(dataB(i,:,:));
-        imagesc(x_axis, z_axis_env, BB);
-        title(sprintf('B Pre-scan (Frame %d)', i));
+        % All contrast, full-frame resizing, and PNG export happen in MATLAB.
+        % ENV is already 8-bit B-mode: do not Hilbert/log/min-max it again.
+        BB = uint8(squeeze(dataB(i,:,:)));
+        [exported, toned] = render_clarius_bmode(BB);
+        imagesc(x_axis, z_axis_env, toned, [0 255]);
+        title(sprintf('B Pre-scan, gamma 0.8 (Frame %d)', i));
         xlabel('Lateral Position (mm)');
         ylabel('Depth (mm)');
         axis image;
@@ -149,7 +160,23 @@ if ~isempty(env_files)
         xlim([-width_mm/2, width_mm/2]);
         ylim([0, depth_mm]);
         drawnow;
+        destination = fullfile(envFolder, sprintf('frame_%03d.png', i));
+        if isfile(destination)
+            assert(isequal(imread(destination),exported), ...
+                'Refusing to overwrite a differing ENV export: %s',destination);
+        else
+            imwrite(exported,destination);
+        end
+        metadata = struct('frame',i,'source',fullPathB,'gamma',0.8, ...
+            'native_shape_hw',size(BB),'output_shape_hw',size(exported), ...
+            'processing_engine',['MATLAB ' version],'cropped',false, ...
+            'resize_method','MATLAB imresize bilinear, Antialiasing true, full frame', ...
+            'timestamp_raw',sprintf('%u',tsB(i)));
+        fidMetadata = fopen(fullfile(envFolder,sprintf('frame_%03d.json',i)),'w');
+        assert(fidMetadata ~= -1,'Cannot create ENV metadata');
+        fprintf(fidMetadata,'%s',jsonencode(metadata));fclose(fidMetadata);
     end
+    fprintf('Saved %d MATLAB env_gamma08 images to: %s\n',numFrames,envFolder);
 else
     warning('No *_env.raw file found in path: %s', path);
 end
@@ -244,24 +271,24 @@ function [data, header, ts] = rdataread(filename, frames)
     end
     
     if (header.id == 3 || header.id == 0) % PW IQ or IQ
-        ts = zeros(1, frames);
+        ts = zeros(1, frames, 'uint64');
         data = zeros(frames, header.samples*2, header.lines);
         for f = 1:frames
-            ts(f) = fread(fid, 1, 'int64');
+            ts(f) = fread(fid, 1, '*uint64');
             data(f,:,:) = fread(fid, [header.samples * 2, header.lines], 'int16');
         end
     elseif (header.id == 1) % ENV
-        ts = zeros(1, frames);
+        ts = zeros(1, frames, 'uint64');
         data = zeros(frames, header.samples, header.lines);
         for f = 1:frames
-            ts(f) = fread(fid, 1, 'int64');
+            ts(f) = fread(fid, 1, '*uint64');
             data(f,:,:) = fread(fid, [header.samples, header.lines], 'uint8');
         end
     elseif (header.id == 2) % RF
-        ts = zeros(1, frames);
+        ts = zeros(1, frames, 'uint64');
         data = zeros(frames, header.samples, header.lines);
         for f = 1:frames
-            ts(f) = fread(fid, 1, 'int64');
+            ts(f) = fread(fid, 1, '*uint64');
             data(f, :, :) = fread(fid, [header.samples, header.lines], 'int16');
         end
     else
