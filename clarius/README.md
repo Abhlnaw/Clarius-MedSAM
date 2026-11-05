@@ -89,6 +89,9 @@ Mask and feature arrays retain their native sample grid. Resizing the PNG is for
 
 ## Validation
 
+For the 1418 × 853 manual annotation set, clean model inputs, red-outline
+conversion and independent review, see [manual annotation workflow](ANNOTATION.md).
+
 For SSIM, Dice, and IoU against shared per-image references, see
 [reference-mask evaluation](EVALUATION.md). The current seven-image SSIM results
 use explicitly provisional AI-drawn references; they require PI/expert review
