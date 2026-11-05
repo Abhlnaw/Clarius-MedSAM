@@ -89,6 +89,9 @@ Mask and feature arrays retain their native sample grid. Resizing the PNG is for
 
 ## Validation
 
+For the selected **`env_gamma08`** rendering and full-frame contrast exports,
+see [Clarius contrast exploration](CONTRAST.md).
+
 For the 1418 × 853 manual annotation set, clean model inputs, red-outline
 conversion and independent review, see [manual annotation workflow](ANNOTATION.md).
 
