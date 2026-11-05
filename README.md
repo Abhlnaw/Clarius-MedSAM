@@ -34,6 +34,10 @@ previous acceptance rule. Existing saved selections need **Split latest
 region** again to apply the setting; a separate output folder keeps comparisons
 separate. See [settings and limits](clarius/README.md#settings-and-performance).
 
+An experimental [local GLSZM implementation](clarius/GLSZM.md) is available via
+`--auto-source glszm` or `--auto-source combined_glszm`, with selectable inspection
+views and a reproducible comparison script. The default remains Combined/GLCM.
+
 The original MedSAM masks and source labels are retained alongside the automatic result. GLCM maps, automatic results, and recent image embeddings are cached. The manual correction tools from the rejected iteration have been removed. See [the current workflow](clarius/README.md) and [algorithm details](clarius/GLCM.md).
 
 ## Run the Clarius workflow

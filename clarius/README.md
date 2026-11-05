@@ -46,6 +46,12 @@ Source groups still describe appearance, not anatomy. The method is an automatic
 
 ## Settings and performance
 
+Experimental **GLSZM** and **Combined GLSZM** views and automatic source options
+are also available. They count connected equal-gray-level zones in local windows;
+the current Combined/GLCM q0.985 default is unchanged. See the
+[GLSZM implementation and comparison](GLSZM.md) for controls, exact versus
+sampled maps, and the reproducible exam04/exam05 comparison.
+
 `--glcm-levels` accepts 8 (default), 16, 32, or 64. Increasing levels substantially increases CPU GLCM cost. MedSAM encoding runs on the requested device; GLCM and spatial refinement run on CPU.
 
 `--auto-correlation-quantile` defaults to **0.985** in automatic Low / High
@@ -82,6 +88,11 @@ Save writes all original regions on the current frame and each region's latest r
 Mask and feature arrays retain their native sample grid. Resizing the PNG is for presentation, not physical calibration. `shape_hw` and `overlay_shape_hw` record the separate dimensions. Original model masks and source partitions are preserved. Old annotation records remain readable.
 
 ## Validation
+
+For SSIM, Dice, and IoU against shared per-image references, see
+[reference-mask evaluation](EVALUATION.md). The current seven-image SSIM results
+use explicitly provisional AI-drawn references; they require PI/expert review
+before being treated as anatomical ground truth.
 
 ```powershell
 python -m unittest discover -s tests -p "test_clarius_*.py" -v
