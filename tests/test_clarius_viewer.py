@@ -23,6 +23,25 @@ class StubModel:
 
 
 class ViewerTests(unittest.TestCase):
+    def test_glszm_views_share_maps_and_save_automatic_gate(self):
+        import clarius_texture
+        viewer=self.viewer
+        with patch('clarius_texture.local_glszm_features',wraps=clarius_texture.local_glszm_features) as calculate:
+            viewer.refinement_mode.set_active(4)
+            viewer.split_texture()
+            self.assertEqual(viewer.texture['method'],'local_glszm_v1')
+            viewer.refinement_mode.set_active(5)
+            self.assertEqual(viewer.texture['method'],'local_hybrid_glszm_v1')
+            viewer.refinement_mode.set_active(3)
+            self.assertEqual(viewer.texture['source_method'],'local_hybrid_glszm_v1')
+            self.assertEqual(viewer.texture['automatic_refinement']['distance_gate_family'],'glszm')
+            self.assertEqual(calculate.call_count,1)
+        expected=viewer.texture['selected_mask'].copy()
+        viewer.save();viewer.load()
+        np.testing.assert_array_equal(viewer.refinements[0]['selected_mask'],expected)
+        self.assertEqual(viewer.refinements[0]['zone_connectivity'],8)
+        self.assertEqual(viewer.refinements[0]['sampling_step_hw'],[8,2])
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)

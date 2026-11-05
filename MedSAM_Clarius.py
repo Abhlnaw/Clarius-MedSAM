@@ -40,16 +40,19 @@ def load_rgb(path):
 
 class Viewer:
     def __init__(self, model, device, paths, output, glcm_levels=8, auto_source="combined",
-                 auto_correlation_quantile=DEFAULT_CORRELATION_QUANTILE):
+                 auto_correlation_quantile=DEFAULT_CORRELATION_QUANTILE, glszm_step=(8, 2)):
         self.model, self.device = model, device
         self.paths, self.output = paths, output
         self.index = 0
         self.glcm_levels, self.auto_source = glcm_levels, auto_source
         self.auto_correlation_quantile = validate_correlation_quantile(auto_correlation_quantile)
+        if len(glszm_step) != 2 or any(not isinstance(n, (int, np.integer)) or n < 1 for n in glszm_step):
+            raise ValueError("GLSZM step must contain two positive integers")
+        self.glszm_step = tuple(glszm_step)
         self.embedding_cache = OrderedDict()
         self._busy = False
         self.fig, self.ax = plt.subplots(figsize=(11, 8))
-        self.fig.subplots_adjust(bottom=0.23)
+        self.fig.subplots_adjust(bottom=0.31)
         self.buttons = []
         for i, (label, callback) in enumerate([
             ("Undo", self.undo), ("Save", self.save),
@@ -64,8 +67,8 @@ class Viewer:
         self.texture_button.on_clicked(self.split_texture)
         self.mask_button = Button(self.fig.add_axes([0.39, 0.145, 0.23, 0.04]), "Show MedSAM masks")
         self.mask_button.on_clicked(self.show_masks)
-        self.refinement_mode = RadioButtons(self.fig.add_axes([0.67, 0.135, 0.23, 0.085]),
-                                             ("Combined", "Brightness", "GLCM", "Low / High variation"), active=3)
+        self.refinement_mode = RadioButtons(self.fig.add_axes([0.67, 0.13, 0.28, 0.14]),
+            ("Combined", "Brightness", "GLCM", "Low / High variation", "GLSZM", "Combined GLSZM"), active=3)
         self.refinement_mode.on_clicked(self.change_mode)
         self.connected_only = CheckButtons(self.fig.add_axes([0.12, 0.195, 0.49, 0.025]),
                                             ["Keep clicked connected patch only"], [True])
@@ -261,6 +264,7 @@ class Viewer:
         mode = self.refinement_mode.value_selected.lower()
         if mode == "low / high variation":
             mode = "variation"
+        mode = mode.replace(" ", "_")
         base_mode = self.auto_source if mode == "variation" else mode
         self.status.set_text(f"Calculating {mode} features inside the latest mask ...")
         self.fig.canvas.draw()
@@ -268,8 +272,11 @@ class Viewer:
         start = time.perf_counter()
         try:
             key = (len(self.regions) - 1, base_mode, self.glcm_levels)
+            if base_mode in ("glszm", "combined_glszm"):
+                key += self.glszm_step
             if key not in self.texture_cache:
                 shared = None
+                shared_glszm = None
                 if base_mode in ("combined", "glcm"):
                     for other in ("combined", "glcm"):
                         existing = self.texture_cache.get((len(self.regions) - 1, other, self.glcm_levels))
@@ -277,8 +284,15 @@ class Viewer:
                             maps = existing["features"][..., -8:]
                             shared = (maps, (maps[..., 2] > 0) & (maps[..., 6] > 0) & self.regions[-1][1])
                             break
+                if base_mode in ("glszm", "combined_glszm"):
+                    for other in ("glszm", "combined_glszm"):
+                        existing = self.texture_cache.get((len(self.regions) - 1, other, self.glcm_levels, *self.glszm_step))
+                        if existing is not None:
+                            shared_glszm = (existing["features"][..., -16:], existing["labels"] > 0)
+                            break
                 self.texture_cache[key] = analyze_texture(self.image.mean(axis=-1), self.regions[-1][1],
-                    method=base_mode, levels=self.glcm_levels, glcm_data=shared)
+                    method=base_mode, levels=self.glcm_levels, glcm_data=shared,
+                    glszm_data=shared_glszm, glszm_step=self.glszm_step)
             source = self.texture_cache[key]
             if mode == "variation":
                 auto_key = (*key, "automatic", self.auto_correlation_quantile)
@@ -303,7 +317,7 @@ class Viewer:
         groups = self.texture["actual_groups"]
         if mode == "variation":
             gate = self.texture["automatic_refinement"]
-            setting = f", q{gate['correlation_quantile']:.3f}" if gate["correlation_gate_applied"] else ", legacy texture rule"
+            setting = f", q{gate['distance_gate_quantile']:.3f}" if gate["distance_gate_applied"] else ", legacy texture rule"
             self.status.set_text(f"Automatically kept {int(self.texture['selected_mask'].sum())} pixels from {base_mode}{setting}. Save to export.")
         else:
             self.status.set_text(f"{mode.capitalize()}: {groups} group(s). Click one to keep it; switch mode to compare.")
@@ -312,8 +326,8 @@ class Viewer:
     def change_mode(self, _=None):
         if self._busy:
             return
-        mode = self.refinement_mode.value_selected.lower()
-        if mode in ("combined", "glcm"):
+        mode = self.refinement_mode.value_selected.lower().replace(" ", "_")
+        if mode in ("combined", "glcm", "glszm", "combined_glszm"):
             self.auto_source = mode
         if self.texture is not None:
             self.split_texture()
@@ -357,19 +371,23 @@ def main():
     parser.add_argument("--device", default="cuda:0" if torch.cuda.is_available() else "cpu")
     parser.add_argument("-o", "--output", type=Path, default=Path("clarius_annotations"))
     parser.add_argument("--glcm-levels", type=int, choices=(8, 16, 32, 64), default=8)
-    parser.add_argument("--auto-source", choices=("combined", "glcm"), default="combined",
+    parser.add_argument("--auto-source", choices=("combined", "glcm", "glszm", "combined_glszm"), default="combined",
                         help="Source proposal for automatic Low / High variation refinement")
-    parser.add_argument("--auto-correlation-quantile", type=validate_correlation_quantile,
+    parser.add_argument("--auto-correlation-quantile", "--auto-texture-quantile", dest="auto_correlation_quantile", type=validate_correlation_quantile,
                         default=DEFAULT_CORRELATION_QUANTILE,
-                        help="Automatic seed correlation-distance quantile (default: 0.985; 0 disables it)")
+                        help="Automatic GLCM-correlation or GLSZM-feature distance quantile (default: 0.985; 0 disables it)")
+    parser.add_argument("--glszm-step", type=int, nargs=2, default=(8, 2), metavar=("DEPTH", "LATERAL"),
+                        help="GLSZM sampling step in native pixels; 1 1 is exact dense mode (default: 8 2)")
     args = parser.parse_args()
+    if any(n < 1 for n in args.glszm_step):
+        parser.error("GLSZM sampling steps must be positive")
     paths = sorted(p for p in args.input.iterdir() if p.suffix.lower() in
                    {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}) if args.input.is_dir() else [args.input]
     if not paths or any(not p.is_file() for p in paths):
         parser.error("No input images found")
     model = sam_model_registry["vit_b"](checkpoint=str(args.checkpoint)).to(args.device).eval()
     viewer = Viewer(model, args.device, paths, args.output, glcm_levels=args.glcm_levels, auto_source=args.auto_source,
-                    auto_correlation_quantile=args.auto_correlation_quantile)
+                    auto_correlation_quantile=args.auto_correlation_quantile, glszm_step=args.glszm_step)
     plt.show()
 
 
