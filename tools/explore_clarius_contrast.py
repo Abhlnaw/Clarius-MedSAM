@@ -1,4 +1,9 @@
-"""Compare native Clarius B-mode with RF display windows, without using masks."""
+"""Historical Python contrast experiment, without using masks.
+
+The active export pipeline is now prepare_clarius_frames.py (decompression
+only), followed by MATLAB export_clarius_bmode. This experiment is retained
+for reproducing the original comparison, not for creating current inputs.
+"""
 import argparse
 import hashlib
 import json

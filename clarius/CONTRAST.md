@@ -6,7 +6,56 @@ Existing annotation images and masks remain untouched.
 
 **Preferred rendering: `env_gamma08`**, selected after reviewing the comparison
 images. Use the recorded Clarius B-mode stream with gamma 0.8, then resize the
-entire frame to 1418 × 853. The other renderings remain available for comparison.
+entire frame to 1418 × 853. **The current image-processing/export stage runs in
+MATLAB.** The original contrast exploration was implemented in Python; those
+historical experiments remain reproducible below.
+
+## Current MATLAB export pipeline
+
+Python prepares unchanged RAW frame bytes from the existing capture manifest;
+it performs archive extraction, LZO decompression, and timestamp-based frame
+selection only. It does not import NumPy/Pillow, apply contrast, resize samples,
+or write image files. Capture identifiers and the non-`exam##` selection are
+preserved. The one-frame RAW headers record one frame; timestamps and sample
+bytes remain intact.
+
+MATLAB `export_clarius_bmode` reads those bytes, applies
+`uint8(floor(255 * (double(env)/255).^0.8 + 0.5))`, resizes the complete frame
+with `imresize(...,'bilinear','Antialiasing',true)`, and writes PNGs and JSON
+provenance. No Hilbert transform, second logarithm, or per-image min/max
+normalization is applied to the already processed uint8 B-mode stream.
+MATLAB documents its resizing kernel and antialiasing behavior in
+[imresize](https://www.mathworks.com/help/matlab/ref/imresize.html).
+
+Run from the repository root:
+
+```powershell
+python tools/prepare_clarius_frames.py --manifest .\clarius_annotations\manual_segmentation\manifest.json --output .\clarius_annotations\matlab_env_gamma08\prepared --lzop "C:\Users\abhit\Documents\Hoyt Research\lzop.exe"
+matlab -batch "addpath('clarius'); export_clarius_bmode('clarius_annotations/matlab_env_gamma08/prepared/frames.json','clarius_annotations/matlab_env_gamma08');"
+```
+
+The 157 model inputs are in `clarius_annotations/matlab_env_gamma08/images`.
+Use `--cases 001 105` and fresh output folders for a small preparation trial.
+For a decompressed single exam, `runme2_export.m` uses the same MATLAB rendering
+function and writes `exported_images_env_gamma08`. Older RF exports are optional
+and kept in a separate legacy folder.
+
+Checks:
+
+```powershell
+python -m unittest discover -s tests -p "test_clarius_frame_preparation.py" -v
+matlab -batch "addpath('clarius'); test_clarius_bmode"
+```
+
+The Python checks verify exact sample-byte/timestamp preservation, frame
+selection, and truncated-input rejection. MATLAB checks known gamma values,
+black preservation, full-frame dimensions, constant-tone resizing, RAW array
+orientation, and integer timestamp precision. MATLAB can also compare its
+images with the historical Python exports by accepting that image folder as
+an optional third argument. Rendering SSIM in that audit measures exporter
+agreement, not segmentation accuracy. Small grayscale rounding differences
+between MATLAB and Pillow resizing are possible; outputs are not claimed to
+be byte-identical.
 
 ## Findings
 
@@ -82,7 +131,7 @@ scan conversion. The native B-mode stream itself also lacks the final display
 scan conversion and potentially other processing present in the website image;
 an exact reproduction of that screenshot is not established.
 
-## Reproduce
+## Reproduce the historical Python exploration
 
 Use the scientific Python environment containing NumPy, SciPy, Pillow and
 scikit-image, plus the existing `lzop.exe`:

@@ -1,5 +1,24 @@
 # Manual annotation workflow
 
+The current preferred `env_gamma08` inputs are generated with the
+[MATLAB export pipeline](CONTRAST.md#current-matlab-export-pipeline). Python
+only decompresses/prepares RAW bytes before that image-formation stage. The
+new independently traced set is local under
+`clarius_annotations/liver_env_gamma08_v2`; its masks remain provisional.
+The RF-derived export and older annotation helpers below describe the earlier
+dataset, which remains available for provenance.
+
+The independently authored 157-case vector recipe is versioned in
+`clarius/liver_env_gamma08_contours.json`. It contains outer boundaries,
+visible-lumen exclusions and review notes keyed by the existing three-digit
+capture IDs. It is specific to these images, not an automatic liver detector.
+The contours are provisional and require expert review. The local dataset's
+`source_manifest.json` pairs those IDs with clean images and hashes;
+`tools/render_liver_contours.py` renders the recipe into binary masks and
+full-resolution red outlines. Its tests check raster geometry and source
+preservation, not anatomical accuracy. The ultrasound pixels and generated
+review artifacts remain local in the ignored annotation directory.
+
 The current annotation set uses **1418 × 853** full-frame ultrasound images
 for both manual masks and model evaluation. The wide appearance comes from
 bilinear resizing of the entire RF-derived frame; it does not crop the image

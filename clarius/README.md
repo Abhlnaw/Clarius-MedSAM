@@ -2,7 +2,10 @@
 
 ## Run
 
-Set the exam directory in `clarius/runme2_export.m`, then export the underlying B-mode pixels (not plot screenshots):
+Set the exam directory in `clarius/runme2_export.m`. MATLAB reads the Clarius
+`*_env.raw` B-mode stream, applies the selected gamma 0.8 tone curve, resizes the
+complete frame to 1418 by 853, and writes PNGs to `exported_images_env_gamma08`.
+Python is used only if archive/LZO decompression is needed before this export.
 
 ```powershell
 matlab -batch "run('clarius/runme2_export.m')"
@@ -11,10 +14,16 @@ matlab -batch "run('clarius/runme2_export.m')"
 Start the interactive viewer using your inference Python environment:
 
 ```powershell
-python MedSAM_Clarius.py --checkpoint .\medsam_vit_b.pth --device cuda:0 -i "C:\Users\abhit\Documents\Hoyt Research\data\exam05\exported_images" --output ".\clarius_annotations\exam05_glcm_test" --glcm-levels 8
+python MedSAM_Clarius.py --checkpoint .\medsam_vit_b.pth --device cuda:0 -i "C:\Users\abhit\Documents\Hoyt Research\data\exam05\exported_images_env_gamma08" --output ".\clarius_annotations\exam05_glcm_test" --glcm-levels 8
 ```
 
-The input can also be a single image. Use a separate output folder per exam. Use `--device cpu` without CUDA. The original external `runme2.m` is unchanged; its copy in this repository exports the RF-derived B-mode pixels and JSON provenance.
+The input can also be a single image. Use a separate output folder per exam. Use
+`--device cpu` without CUDA. The original external `runme2.m` is unchanged; run
+the repository copy above for the new rendering. Its optional `exportLegacyRF`
+flag writes the older RF-derived rendering to `exported_images_rf_legacy`.
+The Python viewer still performs segmentation and annotation; it does not
+replace the MATLAB image-formation stage. For all 157 captures, use the
+[MATLAB batch export](CONTRAST.md#current-matlab-export-pipeline).
 
 ## Automatic region selection
 
