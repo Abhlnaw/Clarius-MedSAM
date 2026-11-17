@@ -1,0 +1,644 @@
+{
+  "slides": [
+    {
+      "title": "Clarius ultrasound\nliver segmentation",
+      "layout": "cover",
+      "subtitle": "Sri Abhinav Thatavarthi\nResearch update for Dr. Hoyt · November 2026",
+      "notes": "Planned talk length is 15–20 minutes, followed by discussion. This update covers the segmentation target, ultrasound image formation, the current MedSAM-plus-texture pipeline, exploratory comparisons, and evaluation with the PI’s new references. Describe the project as work in progress.\n\nSources\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.",
+      "id": "p"
+    },
+    {
+      "title": "Liver parenchyma as the segmentation target",
+      "layout": "imageRight",
+      "lines": [
+        "Delineate visible liver tissue within the image.",
+        "Exclude surrounding fat and clearly visible vessel lumens.",
+        "Use the retained region for subsequent texture analysis."
+      ],
+      "image": "clarius_annotations/liver_env_gamma08_v2/overlays/004_Small_Organs Exam - 02-Apr-2026_14-10 (exam 3027107)_capture_1.png",
+      "caption": "Working contour example. Expert revision is in progress.",
+      "notes": "Segmentation assigns a target label to pixels. Our current target is visible liver parenchyma, with visible vessel lumens excluded. This definition matters for both the model outputs and reference masks. The example is an AI-authored draft shown to explain the target. Its anatomy still requires review. Lesion localization is a longer-term objective that will need its own labels and validation.\n\nSources\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.",
+      "id": "hoyt_s02"
+    },
+    {
+      "title": "Segmentation methods in context",
+      "layout": "table",
+      "headers": [
+        "Approach",
+        "Typical input",
+        "Relevance to this project"
+      ],
+      "rows": [
+        [
+          "Thresholding and region growing",
+          "Intensity rules and a seed",
+          "Transparent baseline with sensitivity to gain and artifacts"
+        ],
+        [
+          "U-Net and nnU-Net",
+          "Task-specific labeled images",
+          "Candidate supervised baselines once expert masks are available"
+        ],
+        [
+          "SAM and MedSAM",
+          "Image plus spatial prompts",
+          "A bounding box produces an initial region proposal"
+        ],
+        [
+          "Ultrasound-adapted models",
+          "Ultrasound training and prompts",
+          "Future comparisons, including SAMUSA"
+        ]
+      ],
+      "widths": [
+        170,
+        185,
+        315
+      ],
+      "font": 15,
+      "foot": "Our implementation combines a pretrained promptable model with local texture refinement.",
+      "notes": "Classical methods use explicit intensity or boundary assumptions. Supervised networks learn a task from labeled examples. U-Net and nnU-Net provide established biomedical segmentation approaches. MedSAM adapts SAM to medical images and uses bounding-box prompts. The MedSAM paper reports training on 1,570,263 image-mask pairs across ten modalities. Ultrasound-specific adaptations such as SAMUSA are relevant future comparison candidates. We have implemented the MedSAM-plus-texture workflow here. A new supervised Clarius model has not yet been trained.\n\nSources\nRonneberger et al. U-Net. MICCAI (2015). https://arxiv.org/abs/1505.04597\nIsensee et al. nnU-Net. Nature Methods 18, 203–211 (2021). https://doi.org/10.1038/s41592-020-01008-z and https://github.com/MIC-DKFZ/nnUNet\nMa et al. Segment anything in medical images. Nature Communications 15, 654 (2024). https://www.nature.com/articles/s41467-024-44824-z\nPodvin et al. SAMUSA. MICCAI (2025). https://papers.miccai.org/miccai-2025/0805-Paper3015.html",
+      "id": "hoyt_s03"
+    },
+    {
+      "title": "Ultrasound image characteristics",
+      "layout": "twoImages",
+      "images": [
+        "clarius_annotations/matlab_env_gamma08/images/105_Small_Organs Exam - 12-Nov-2025_11-51 (exam 2679830)_capture_1.png",
+        "clarius_annotations/matlab_env_gamma08/images/137_Small_Organs Exam - 13-Nov-2025_16-35 (exam 2684928)_capture_1.png"
+      ],
+      "labels": [
+        "Depth-dependent appearance and shadowing",
+        "Variable interfaces and field of view"
+      ],
+      "foot": "Speckle, low contrast, and acquisition settings complicate consistent boundaries.",
+      "notes": "These are actual full-frame MATLAB exports from the local data. Describe the visible appearance without assigning a diagnosis. Speckle and shadows can make texture or intensity alone ambiguous. Neighboring structures can have similar brightness. In the local experiments, this ambiguity contributed to broad MedSAM masks, lower-boundary spillover, and missed tissue during refinement. Window size and quantization also change what the texture descriptors summarize.\n\nSources\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nPodvin et al. SAMUSA. MICCAI (2025). https://papers.miccai.org/miccai-2025/0805-Paper3015.html",
+      "id": "hoyt_s04"
+    },
+    {
+      "title": "Data and current study status",
+      "layout": "imageRight",
+      "lines": [
+        "157 first-frame images from 57 recording folders.",
+        "The batch selection excludes folders named exam##.",
+        "Earlier comparisons used seven frames from exam04 and exam05.",
+        "The PI is re-segmenting the image set."
+      ],
+      "image": "clarius_annotations/liver_env_gamma08_v2/inspection/page_05.png",
+      "caption": "Examples from the current image set",
+      "notes": "The 157-image set uses the first image from each selected capture. Fifty-seven refers to source recording folders, not a verified number of distinct patients. The earlier seven-frame development comparison is a separate collection from exam04 and exam05. These are repeated frames within two examinations, so they do not constitute seven independent patient observations. The PI’s new manual references will support the next evaluation. Completion of those references has not been established.\n\nSources\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nLocal saved results. clarius_annotations/ssim_reference_evaluation_v2/scores/metrics.json and REPORT.md. Seven frames from exam04/exam05, provisional unreviewed and non-blinded references, historical RF-derived input grid.\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.",
+      "id": "hoyt_s05"
+    },
+    {
+      "title": "Image processing in MATLAB",
+      "layout": "process",
+      "steps": [
+        [
+          "Archive preparation",
+          "Python extracts and decompresses unchanged RAW frame bytes."
+        ],
+        [
+          "B-mode samples",
+          "MATLAB reads the recorded uint8 *_env.raw stream."
+        ],
+        [
+          "Selected display mapping",
+          "MATLAB applies gamma 0.8 and full-frame bilinear resizing."
+        ],
+        [
+          "Model input",
+          "MATLAB writes 1418 × 853 PNGs with source metadata."
+        ]
+      ],
+      "foot": "The sample grid requires further scan-conversion and physical-spacing verification.",
+      "notes": "The active export pipeline assigns archive extraction, LZO decompression and timestamp-based frame selection to Python. MATLAB reads the array, applies the pointwise gamma curve, resizes the complete frame and writes PNGs. The recorded ENV stream is already B-mode grayscale, so it should not receive a second Hilbert transform or logarithm. The exported 1418 by 853 grid is a display grid. It does not establish calibrated millimeter spacing or reproduce every part of the Clarius website display pipeline. Historical RF-derived images remain relevant to interpreting the earlier results.\n\nSources\nClarius Research raw-data documentation. https://github.com/clariusdev/research/blob/master/docs/raw-data-format.md\nMATLAB export audit. clarius_annotations/matlab_env_gamma08/manifest.json and liver_env_gamma08_v2/validation.json. 157 full-frame images, 1418 by 853. Image-processing export agreement is separate from mask agreement.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s06"
+    },
+    {
+      "title": "Selected Clarius rendering",
+      "layout": "twoImages",
+      "images": [
+        "clarius_annotations/contrast_exploration/pilot/rf_current/010_Small_Organs Exam - 02-Apr-2026_14-36 (exam 3027238)_capture_1.png",
+        "clarius_annotations/matlab_env_gamma08/images/010_Small_Organs Exam - 02-Apr-2026_14-36 (exam 3027238)_capture_1.png"
+      ],
+      "labels": [
+        "Earlier RF-derived display",
+        "Recorded B-mode with gamma 0.8"
+      ],
+      "foot": "Matched capture timestamps. RF and B-mode are distinct acquisition streams.",
+      "notes": "Gamma 0.8 was selected after visual comparison of the rendering options. Gamma below one raises midtones while preserving zero-valued samples before resizing. Much of the visible appearance change also comes from selecting the recorded B-mode stream instead of reconstructing the earlier RF display. This image pair therefore combines an acquisition-stream change with a display-mapping change. It should not be interpreted as a controlled contrast-only experiment. Across all 157 images, MATLAB and the earlier Python rendering differed by a mean absolute 0.180 grayscale levels and a maximum of two on a 0–255 scale. Those are exporter-agreement measurements. Segmentation improvement on this rendering remains to be evaluated.\n\nSources\nClarius Research raw-data documentation. https://github.com/clariusdev/research/blob/master/docs/raw-data-format.md\nMATLAB export audit. clarius_annotations/matlab_env_gamma08/manifest.json and liver_env_gamma08_v2/validation.json. 157 full-frame images, 1418 by 853. Image-processing export agreement is separate from mask agreement.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s07"
+    },
+    {
+      "title": "MedSAM and local refinement",
+      "layout": "process",
+      "steps": [
+        [
+          "Bounding-box prompt",
+          "The user draws a box around the target."
+        ],
+        [
+          "MedSAM proposal",
+          "The pretrained model produces a parent mask."
+        ],
+        [
+          "Local appearance maps",
+          "Brightness statistics and GLCM or GLSZM describe tissue within that mask."
+        ],
+        [
+          "Automatic selection",
+          "An automatic seed guides recovery and spatial cleanup."
+        ]
+      ],
+      "foot": "The final region stays inside the MedSAM parent. Missed parent-mask tissue remains a limitation.",
+      "notes": "The workflow begins with a manual box prompt. The current checkpoint is the MedSAM ViT-B model. The model produces a broad parent mask, then the local refinement stage operates within that proposal. Interactive source-group inspection remains available, while the current Low / High variation mode automatically chooses a region. The automatic selector uses appearance compatibility and spatial rules. It has no trained liver-anatomy classifier. A parent mask that misses liver tissue constrains everything downstream. A parent-only baseline is therefore important in the planned evaluation.\n\nSources\nMa et al. Segment anything in medical images. Nature Communications 15, 654 (2024). https://www.nature.com/articles/s41467-024-44824-z\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s08"
+    },
+    {
+      "title": "GLCM describes neighboring gray levels",
+      "layout": "glcm",
+      "lines": [
+        "Quantize the image into 8 gray levels.",
+        "Count neighboring pairs within each masked window.",
+        "Calculate contrast, homogeneity, energy, and correlation.",
+        "Average four directions at two window scales."
+      ],
+      "headers": [
+        "Pixel level",
+        "Neighbor 0",
+        "Neighbor 1"
+      ],
+      "rows": [
+        [
+          "0",
+          "1",
+          "1"
+        ],
+        [
+          "1",
+          "0",
+          "1"
+        ]
+      ],
+      "foot": "Example directed counts for [0, 0, 1, 1]. The implementation also adds reverse pairs.",
+      "notes": "A gray-level co-occurrence matrix counts how often a pixel of gray level i occurs beside gray level j at a chosen offset. The row [0,0,1,1] gives directed right-neighbor counts (0,0), (0,1), and (1,1). Our implementation symmetrizes and normalizes these counts. For the actual image, four directional features at half and full window scales yield eight maps. Both endpoints of a pair must be inside the parent mask and local window. GLCM can operate on rectangular images and irregular masked regions. The square matrix refers to the gray-level pair histogram. The feature counts are exact for the implemented windows and tested against scikit-image.\n\nSources\nscikit-image graycomatrix/graycoprops. https://scikit-image.org/docs/stable/api/skimage.feature.html#skimage.feature.graycoprops\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s09"
+    },
+    {
+      "title": "Combined features and automatic selection",
+      "layout": "body",
+      "lines": [
+        "Combined uses 4 brightness-statistic maps and 8 GLCM maps.",
+        "Clustering provides appearance groups. A compact, consistent group supplies the automatic seed.",
+        "Seed-derived brightness and texture ranges recover compatible tissue across groups.",
+        "Spatial cleanup limits thin extensions and preserves dark cavities."
+      ],
+      "foot": "Default q0.985 sets a seed-distance percentile for the texture gate.",
+      "notes": "The two brightness scales each contribute a local mean and standard deviation. The two GLCM scales each contribute four descriptors. The original high/low-variation approach merged appearance colors and retained a large region. The current selector evaluates compact candidate bodies, penalizes local-intensity dispersion, and learns robust ranges from an automatic seed. It then recovers compatible tissue across source groups and applies opening, a bounded envelope, closing, cavity exclusion, and component selection. q0.985 refers to the 98.5th percentile of seed-normalized feature distance. For GLCM the gate uses the two correlation channels. It is not a raw correlation value of 0.985. Details are in the appendix.\n\nSources\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s10"
+    },
+    {
+      "title": "Local GLSZM as an alternative",
+      "layout": "table",
+      "headers": [
+        "Property",
+        "GLCM implementation",
+        "GLSZM implementation"
+      ],
+      "rows": [
+        [
+          "Texture unit",
+          "Neighboring gray-level pairs",
+          "Connected equal-gray zones"
+        ],
+        [
+          "Local descriptors",
+          "4 properties at 2 scales",
+          "8 descriptors at 2 scales"
+        ],
+        [
+          "Spatial support",
+          "Masked neighboring pairs",
+          "8-connected zones clipped to each window"
+        ],
+        [
+          "Computation",
+          "Dense local feature maps",
+          "Exact sampled windows with feature interpolation"
+        ]
+      ],
+      "widths": [
+        150,
+        255,
+        265
+      ],
+      "font": 15,
+      "foot": "Both use 8 gray levels. GLSZM defaults to an 8-row × 2-column sampling step.",
+      "notes": "A gray-level size-zone matrix records how many connected zones occur at each gray level and zone size. The implementation provides all sixteen standard ROI features. Local clustering uses eight descriptors per scale, including small- and large-area emphasis, normalized nonuniformities, zone percentage, variance measures, and entropy. Each sampled local window independently constructs zones. Intermediate feature values use mask-normalized bilinear interpolation. The default does not calculate a separate exact matrix at every native pixel. Quantization can split or merge zones, and large windows mix structures. The GLSZM appearance gate uses all sixteen local channels, so its q0.985 has a different feature-distance meaning from the GLCM gate.\n\nSources\nPyRadiomics GLSZM feature definitions. https://pyradiomics.readthedocs.io/en/stable/features.html#gray-level-size-zone-matrix-glszm-features\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s11"
+    },
+    {
+      "title": "Example method outputs",
+      "layout": "threeImages",
+      "images": [
+        "clarius_annotations/hoyt_presentation_20261112/assets/001_combined.png",
+        "clarius_annotations/hoyt_presentation_20261112/assets/001_glszm.png",
+        "clarius_annotations/hoyt_presentation_20261112/assets/001_combined_glszm.png"
+      ],
+      "labels": [
+        "Combined / GLCM",
+        "GLSZM",
+        "Brightness + GLSZM"
+      ],
+      "descriptions": [
+        "Retains the upper region with some lower-left spillover.",
+        "Selects a smaller portion of the outlined region.",
+        "Retains more tissue with a larger lower extension."
+      ],
+      "foot": "Historical RF image, exam05 frame 001. Red boundary is an approximate development outline.",
+      "notes": "The three methods share the same saved MedSAM parent mask and use eight levels and q0.985. The orange overlays show the selected region. The red boundary in this figure is the older approximate development outline and differs from the later revised v2 scoring references. Use this slide for qualitative inspection only, keeping that provenance clear. Pure GLSZM reduced spillover while omitting much of the desired region on this frame. Adding brightness changed the retained population and improved coverage. The result motivates evaluation of the entire selection pipeline, rather than treating a texture descriptor alone as a segmentation method.\n\nSources\nLocal saved benchmark. clarius_annotations/glszm_comparison/metrics.json and REPORT.md. Seven saved frames, identical MedSAM parents, eight gray levels, q0.985, GLSZM step (8,2). Single-run CPU extraction, clustering and refinement timings.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s12"
+    },
+    {
+      "title": "Exploratory reference agreement",
+      "layout": "table",
+      "headers": [
+        "Method",
+        "SSIM ± frame SD",
+        "ROI SSIM",
+        "Dice",
+        "IoU"
+      ],
+      "rows": [
+        [
+          "Combined / GLCM",
+          "0.8499 ± 0.0350",
+          "0.7719",
+          "0.8643",
+          "0.7636"
+        ],
+        [
+          "Brightness + GLSZM",
+          "0.8365 ± 0.0196",
+          "0.7567",
+          "0.8501",
+          "0.7403"
+        ]
+      ],
+      "widths": [
+        200,
+        170,
+        100,
+        100,
+        100
+      ],
+      "font": 16,
+      "foot": "Seven development frames from two exams. References were provisional, unreviewed, and non-blinded.",
+      "notes": "These numbers come from the revised v2 reference evaluation, which superseded the first rejected reference set. Both methods were compared with the same per-frame reference, using existing q0.985 predictions. Combined/GLCM had higher SSIM on four frames and brightness-plus-GLSZM on three. The macro mean difference was 0.01335. The references were AI-authored or user-guided and propagated to neighboring frames, and the annotator had seen related model outputs. Development also involved these examinations. These constraints make the table exploratory. The PI’s replacement references may change the ranking. The 157 MATLAB-rendered images have not yet undergone this expert-reference comparison.\n\nSources\nLocal saved results. clarius_annotations/ssim_reference_evaluation_v2/scores/metrics.json and REPORT.md. Seven frames from exam04/exam05, provisional unreviewed and non-blinded references, historical RF-derived input grid.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.",
+      "id": "hoyt_s13"
+    },
+    {
+      "title": "GLSZM sampling affects the selected region",
+      "layout": "table",
+      "headers": [
+        "Check",
+        "Recorded observation"
+      ],
+      "rows": [
+        [
+          "128 × 32 native patch",
+          "Dense features 3.38 s, sampled features 0.24 s"
+        ],
+        [
+          "Sampled feature approximation",
+          "Normalized RMSE 0.069–0.196 across descriptors"
+        ],
+        [
+          "Finer step (4,1) on exam05 frame 001",
+          "Pure-GLSZM mask IoU 0.636 versus step (8,2)"
+        ],
+        [
+          "Brightness + GLSZM at finer step",
+          "Mask IoU 0.974 versus step (8,2)"
+        ]
+      ],
+      "widths": [
+        285,
+        385
+      ],
+      "font": 16,
+      "foot": "These checks show configuration sensitivity on the development data.",
+      "notes": "The speed gain from sampling comes with an approximation. Feature RMSE here is divided by each dense feature’s fifth-to-ninety-fifth-percentile range on the patch. It is not a percentage of segmentation error. Changing from (8,2) to (4,1) altered the pure-GLSZM selection substantially on the outlined frame, while brightness-plus-GLSZM changed less. The finer full-frame extraction took 68.2 seconds. A small quantile sweep also failed to surpass the current method against that rough development outline. These observations support retaining GLSZM as an experimental alternative while evaluating it under a fixed, documented configuration.\n\nSources\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nLocal saved benchmark. clarius_annotations/glszm_comparison/metrics.json and REPORT.md. Seven saved frames, identical MedSAM parents, eight gray levels, q0.985, GLSZM step (8,2). Single-run CPU extraction, clustering and refinement timings.",
+      "id": "hoyt_s14"
+    },
+    {
+      "title": "Preliminary CPU runtime",
+      "layout": "table",
+      "headers": [
+        "Method",
+        "Median seconds per frame"
+      ],
+      "rows": [
+        [
+          "Combined / GLCM",
+          "4.41"
+        ],
+        [
+          "GLSZM",
+          "8.03"
+        ],
+        [
+          "Brightness + GLSZM",
+          "8.20"
+        ]
+      ],
+      "widths": [
+        440,
+        230
+      ],
+      "font": 19,
+      "foot": "Seven historical RF frames. Fresh features, clustering, and automatic selection. Single-run timings.",
+      "notes": "These are CPU timings for the refinement stage on the local laptop, with fresh feature maps. They exclude GPU image encoding, file I/O, and plotting. GLSZM extraction was shared in the implementation, but its full extraction cost was charged to each variant when reporting independent method totals. The local setup used an RTX 5070 laptop GPU and Ryzen 9 processor. Warm MedSAM GPU encoding was separately measured at about 0.2 seconds in earlier testing. The CPU texture work dominates the interactive delay on those inputs. These measurements do not characterize the new 1418 by 853 inputs, which need their own benchmark because the sample grid is different.\n\nSources\nLocal saved benchmark. clarius_annotations/glszm_comparison/metrics.json and REPORT.md. Seven saved frames, identical MedSAM parents, eight gray levels, q0.985, GLSZM step (8,2). Single-run CPU extraction, clustering and refinement timings.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s15"
+    },
+    {
+      "title": "Remaining selection failures",
+      "layout": "twoImages",
+      "images": [
+        "clarius_annotations/hoyt_presentation_20261112/assets/003_glszm.png",
+        "clarius_annotations/hoyt_presentation_20261112/assets/003_combined_glszm.png"
+      ],
+      "labels": [
+        "Pure GLSZM selects a deeper population",
+        "Brightness + GLSZM retains the upper region"
+      ],
+      "foot": "Exam05 frame 003. Similar texture and seed choice can change the selected anatomy.",
+      "notes": "Pure GLSZM switched to a deeper population on exam05 frames 003 and 010 in the saved comparison. Brightness-plus-GLSZM and Combined/GLCM were more consistent in selecting the upper region, although lower-left extensions persisted in some outputs. A largest-component rule cannot remove an incorrect extension that remains connected to the intended region. Large spatial windows can blur an internal boundary, and a dark-cavity rule can enlarge a shadow or miss a vessel. These are observed failure mechanisms and motivate targeted error review with the PI’s references.\n\nSources\nLocal saved benchmark. clarius_annotations/glszm_comparison/metrics.json and REPORT.md. Seven saved frames, identical MedSAM parents, eight gray levels, q0.985, GLSZM step (8,2). Single-run CPU extraction, clustering and refinement timings.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s16"
+    },
+    {
+      "title": "PI reference segmentations in progress",
+      "layout": "body",
+      "lines": [
+        "The PI is redoing the segmentations for the image set.",
+        "References will define the liver boundary and excluded visible vessel lumens.",
+        "Each reference will pair with its exact clean MATLAB image.",
+        "The new evaluation will compare every method with the same PI reference."
+      ],
+      "foot": "The new expert-reference comparison is pending completion of the PI annotations.",
+      "notes": "The project’s reference process has evolved. The first twenty-five images originally had user-drawn red outlines. Later AI-assisted drafts and revised contours remained imprecise, including uncertain liver margins and internal structures. Those limitations are why the PI is redoing the segmentations. Record the actual annotation status for each image and confirm a consistent target definition for visible vessel lumens. Keep the clean image and mask on the same pixel grid. If uncertain interfaces or partially visible liver require a convention, document that convention before scoring. The earlier AI-assisted labels should retain their provenance in the project history.\n\nSources\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s17"
+    },
+    {
+      "title": "Evaluation on the PI references",
+      "layout": "process",
+      "steps": [
+        [
+          "Fixed comparisons",
+          "MedSAM alone, brightness refinement, Combined / GLCM, GLSZM, and brightness + GLSZM."
+        ],
+        [
+          "Matched conditions",
+          "Use identical images, prompts, and saved parent masks for refinement comparisons."
+        ],
+        [
+          "Paired metrics",
+          "Report Dice, IoU, full-frame SSIM, ROI SSIM, precision, and recall."
+        ],
+        [
+          "Error review",
+          "Inspect missed liver, extra tissue, and lumen exclusions with runtime."
+        ]
+      ],
+      "foot": "Keep development and evaluation groups separate at the patient or acquisition level when identifiers allow.",
+      "notes": "This is a proposed evaluation protocol. Once the PI references are ready, freeze the preprocessing and method configurations before the comparison. A refinement-only comparison should reuse each saved MedSAM parent so the texture methods see the same initial proposal. A separate end-to-end analysis can expose parent-mask failures. Use identical reference domains across methods, report paired results, and include failed cases. Group repeated frames by examination or recording. Confirm patient identifiers before making patient-level split or sample-size claims. If parameters require tuning, use a separate development group and lock the final evaluation group. Compare native B-mode with gamma 0.8 within the same acquisition stream as a later preprocessing ablation.\n\nSources\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nscikit-image structural_similarity documentation. https://scikit-image.org/docs/stable/api/skimage.metrics.html#skimage.metrics.structural_similarity",
+      "id": "hoyt_s18"
+    },
+    {
+      "title": "Next steps before the presentation",
+      "layout": "body",
+      "lines": [
+        "Complete and audit the PI image-mask pairs as they become available.",
+        "Freeze prompts, preprocessing, and texture settings for evaluation.",
+        "Run the paired method comparison and inspect the largest disagreements.",
+        "Update the result tables with expert-reference scores and current-input runtimes."
+      ],
+      "foot": "The evaluation schedule depends on reference availability. Meeting date remains to be set.",
+      "notes": "For the November meeting, the highest-value update is a clearly documented expert-reference comparison. First confirm file pairing, target definition and annotation completeness. Then produce all method predictions under fixed conditions, compute the metrics and review failure cases. Record a dataset version and the exact settings with the outputs. If the references are still in progress at the meeting, report the completed reference count and present the evaluation plan alongside the exploratory results. Avoid inventing a completion date for the PI or claiming a new score before the paired evaluation runs.\n\nSources\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s19"
+    },
+    {
+      "title": "Longer-term lesion analysis",
+      "layout": "imageRight",
+      "lines": [
+        "Establish reliable liver regions first.",
+        "Study within-liver texture variation and repeatability.",
+        "Add expert lesion labels before testing lesion localization.",
+        "Consider task-specific training or ultrasound-adapted models."
+      ],
+      "image": "clarius_annotations/matlab_env_gamma08/images/055_Small_Organs Exam - 08-Dec-2025_12-04 (exam 2752535)_capture_1.png",
+      "caption": "Current work focuses on the liver region.",
+      "notes": "The motivating future application is to highlight unusual regions within the liver. The current texture groups describe image appearance and are influenced by gain, shadows, speckle and scale. Lesion localization would require expert lesion annotations and its own evaluation, including false-positive and missed-lesion analysis. A liver ROI could restrict that future search and support region-level texture measurements. Repeated scans and acquisition metadata would help test feature stability. If enough expert references accumulate, compare a task-specific U-Net or nnU-Net and ultrasound-adapted promptable models with the current heuristic pipeline.\n\nSources\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nRonneberger et al. U-Net. MICCAI (2015). https://arxiv.org/abs/1505.04597\nIsensee et al. nnU-Net. Nature Methods 18, 203–211 (2021). https://doi.org/10.1038/s41592-020-01008-z and https://github.com/MIC-DKFZ/nnUNet\nPodvin et al. SAMUSA. MICCAI (2025). https://papers.miccai.org/miccai-2025/0805-Paper3015.html",
+      "id": "hoyt_s20"
+    },
+    {
+      "title": "Discussion with Dr. Hoyt",
+      "layout": "body",
+      "lines": [
+        "Confirm the liver and vessel-lumen annotation convention.",
+        "Agree on the primary metrics and the held-out evaluation grouping.",
+        "Prioritize failure cases that matter most for the next iteration.",
+        "Choose the next comparison after the expert-reference evaluation."
+      ],
+      "notes": "Suggested discussion topics are the target definition at ambiguous boundaries, the desired evaluation split, and whether to prioritize organ coverage, spillover reduction, lumen exclusions, or the longer-term lesion application. The present default is Combined/GLCM q0.985. That default reflects development behavior and runtime. The new PI-reference results should guide the next decision.\n\nSources\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nUser project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned.",
+      "id": "hoyt_s21"
+    },
+    {
+      "title": "Appendix · Current parameter settings",
+      "layout": "table",
+      "headers": [
+        "Setting",
+        "Current implementation"
+      ],
+      "rows": [
+        [
+          "Parent model",
+          "MedSAM ViT-B with a user-drawn box"
+        ],
+        [
+          "Quantization",
+          "8 gray levels by default, CLI supports 16, 32, 64"
+        ],
+        [
+          "GLCM",
+          "4 directions, 2 scales, 4 descriptors per scale"
+        ],
+        [
+          "Combined",
+          "4 brightness channels + 8 GLCM channels"
+        ],
+        [
+          "Source grouping",
+          "Up to 3 deterministic appearance groups"
+        ],
+        [
+          "Automatic gate",
+          "q0.985 of seed-normalized feature distance"
+        ],
+        [
+          "GLSZM",
+          "8-connectivity, 2 scales, default sampling step (8,2)"
+        ]
+      ],
+      "widths": [
+        235,
+        435
+      ],
+      "font": 14.5,
+      "foot": "Window sizes derive from the parent region. Display pixels have acquisition-dependent physical spacing.",
+      "notes": "GLCM full windows are approximately one-eighth of the occupied parent height and width, capped at 129 rows by 33 columns, with odd sizes and a half-size second scale. Brightness-only retains the earlier quarter-mask window rule. Combined clustering weights after standardization are 1/sqrt(2) for each local mean, 0.25 for each local standard deviation, and 0.35/sqrt(8) for each GLCM channel. Brightness-plus-GLSZM distributes the texture weight as 0.35/sqrt(16). The selector uses a 256 by 256 normalized analysis grid for shape operations. These fixed heuristics still require validation across image grids.\n\nSources\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s22"
+    },
+    {
+      "title": "Appendix · Interpretation of the metrics",
+      "layout": "table",
+      "headers": [
+        "Metric",
+        "Definition or interpretation"
+      ],
+      "rows": [
+        [
+          "Dice",
+          "2 × intersection / (prediction area + reference area)"
+        ],
+        [
+          "IoU",
+          "Intersection / union of prediction and reference"
+        ],
+        [
+          "SSIM",
+          "Mean local structural similarity on binary 0/1 masks"
+        ],
+        [
+          "ROI mean SSIM",
+          "Local SSIM averaged over a common evaluation domain"
+        ],
+        [
+          "Precision and recall",
+          "Retained foreground correctness and reference coverage"
+        ]
+      ],
+      "widths": [
+        210,
+        460
+      ],
+      "font": 16,
+      "foot": "Report SSIM with overlap metrics because shared background can raise the full-frame score.",
+      "notes": "SSIM uses data_range=1, eleven-by-eleven Gaussian windows, sigma 1.5, K1=0.01, K2=0.03 and population covariance. ROI mean SSIM is a custom summary of the SSIM map over the union of the parent, reference and every prediction, excluding invalid image-border centers. All methods use the same evaluation domain for an image. Full-array Dice and IoU directly describe foreground overlap. The current summary is a per-image macro mean and sample SD. Frame SD describes the sample spread and does not quantify independent-patient uncertainty. If physical boundary metrics are added, first verify sample spacing and scan conversion.\n\nSources\nscikit-image structural_similarity documentation. https://scikit-image.org/docs/stable/api/skimage.metrics.html#skimage.metrics.structural_similarity\nLocal saved results. clarius_annotations/ssim_reference_evaluation_v2/scores/metrics.json and REPORT.md. Seven frames from exam04/exam05, provisional unreviewed and non-blinded references, historical RF-derived input grid.\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+      "id": "hoyt_s23"
+    },
+    {
+      "title": "Appendix · Per-frame exploratory scores",
+      "layout": "table",
+      "headers": [
+        "Frame",
+        "GLCM SSIM",
+        "GLSZM SSIM",
+        "GLCM Dice",
+        "GLSZM Dice"
+      ],
+      "rows": [
+        [
+          "exam05 001",
+          "0.8842",
+          "0.8469",
+          "0.9108",
+          "0.8701"
+        ],
+        [
+          "exam05 002",
+          "0.8522",
+          "0.8596",
+          "0.8870",
+          "0.8938"
+        ],
+        [
+          "exam05 003",
+          "0.8752",
+          "0.8543",
+          "0.8939",
+          "0.8720"
+        ],
+        [
+          "exam05 005",
+          "0.8689",
+          "0.8409",
+          "0.8837",
+          "0.8485"
+        ],
+        [
+          "exam05 010",
+          "0.8676",
+          "0.8321",
+          "0.8819",
+          "0.8446"
+        ],
+        [
+          "exam04 001",
+          "0.7998",
+          "0.8106",
+          "0.7908",
+          "0.8106"
+        ],
+        [
+          "exam04 002",
+          "0.8013",
+          "0.8112",
+          "0.8022",
+          "0.8108"
+        ]
+      ],
+      "widths": [
+        150,
+        130,
+        130,
+        130,
+        130
+      ],
+      "font": 14.5,
+      "foot": "GLCM means Combined / GLCM. GLSZM means brightness + GLSZM. Provisional v2 references.",
+      "notes": "These are the saved per-frame values rounded to four decimals. Refer to the main results slide for the reference limitations. The frame values support the observation that the method ranking changes across images, with four higher SSIM values for Combined/GLCM and three for brightness-plus-GLSZM. The underlying source JSON retains full precision and the reference hashes. The PI reference comparison will produce a new result set.\n\nSources\nLocal saved results. clarius_annotations/ssim_reference_evaluation_v2/scores/metrics.json and REPORT.md. Seven frames from exam04/exam05, provisional unreviewed and non-blinded references, historical RF-derived input grid.",
+      "id": "hoyt_s24"
+    },
+    {
+      "title": "Appendix · Selected references",
+      "layout": "references",
+      "lines": [
+        "Ronneberger et al. U-Net. MICCAI, 2015.",
+        "Isensee et al. nnU-Net. Nature Methods, 2021.",
+        "Ma et al. Segment anything in medical images. Nature Communications, 2024.",
+        "Podvin et al. SAMUSA. MICCAI, 2025.",
+        "Clarius Research raw-data documentation.",
+        "scikit-image GLCM and SSIM documentation. PyRadiomics GLSZM definitions.",
+        "Project implementation, saved comparison results, and MATLAB export audit."
+      ],
+      "notes": "Full references and source locations are provided in the notes throughout the deck. Literature methods are background or proposed future comparisons. The reported project scores and timings come from the local development records.\n\nSources\nRonneberger et al. U-Net. MICCAI (2015). https://arxiv.org/abs/1505.04597\nIsensee et al. nnU-Net. Nature Methods 18, 203–211 (2021). https://doi.org/10.1038/s41592-020-01008-z and https://github.com/MIC-DKFZ/nnUNet\nMa et al. Segment anything in medical images. Nature Communications 15, 654 (2024). https://www.nature.com/articles/s41467-024-44824-z\nPodvin et al. SAMUSA. MICCAI (2025). https://papers.miccai.org/miccai-2025/0805-Paper3015.html\nClarius Research raw-data documentation. https://github.com/clariusdev/research/blob/master/docs/raw-data-format.md\nscikit-image graycomatrix/graycoprops. https://scikit-image.org/docs/stable/api/skimage.feature.html#skimage.feature.graycoprops\nPyRadiomics GLSZM feature definitions. https://pyradiomics.readthedocs.io/en/stable/features.html#gray-level-size-zone-matrix-glszm-features\nscikit-image structural_similarity documentation. https://scikit-image.org/docs/stable/api/skimage.metrics.html#skimage.metrics.structural_similarity\nProject implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM\nLocal saved results. clarius_annotations/ssim_reference_evaluation_v2/scores/metrics.json and REPORT.md. Seven frames from exam04/exam05, provisional unreviewed and non-blinded references, historical RF-derived input grid.\nLocal saved benchmark. clarius_annotations/glszm_comparison/metrics.json and REPORT.md. Seven saved frames, identical MedSAM parents, eight gray levels, q0.985, GLSZM step (8,2). Single-run CPU extraction, clustering and refinement timings.\nMATLAB export audit. clarius_annotations/matlab_env_gamma08/manifest.json and liver_env_gamma08_v2/validation.json. 157 full-frame images, 1418 by 853. Image-processing export agreement is separate from mask agreement.",
+      "id": "hoyt_s25"
+    }
+  ],
+  "sources": {
+    "medsam": "Ma et al. Segment anything in medical images. Nature Communications 15, 654 (2024). https://www.nature.com/articles/s41467-024-44824-z",
+    "unet": "Ronneberger et al. U-Net. MICCAI (2015). https://arxiv.org/abs/1505.04597",
+    "nnunet": "Isensee et al. nnU-Net. Nature Methods 18, 203–211 (2021). https://doi.org/10.1038/s41592-020-01008-z and https://github.com/MIC-DKFZ/nnUNet",
+    "samusa": "Podvin et al. SAMUSA. MICCAI (2025). https://papers.miccai.org/miccai-2025/0805-Paper3015.html",
+    "clarius": "Clarius Research raw-data documentation. https://github.com/clariusdev/research/blob/master/docs/raw-data-format.md",
+    "glcm": "scikit-image graycomatrix/graycoprops. https://scikit-image.org/docs/stable/api/skimage.feature.html#skimage.feature.graycoprops",
+    "glszm": "PyRadiomics GLSZM feature definitions. https://pyradiomics.readthedocs.io/en/stable/features.html#gray-level-size-zone-matrix-glszm-features",
+    "metrics": "scikit-image structural_similarity documentation. https://scikit-image.org/docs/stable/api/skimage.metrics.html#skimage.metrics.structural_similarity",
+    "local": "Project implementation and saved results at repository commit 25d9208. clarius/README.md, GLCM.md, GLSZM.md, CONTRAST.md and EVALUATION.md. https://github.com/Abhlnaw/Clarius-MedSAM",
+    "scores": "Local saved results. clarius_annotations/ssim_reference_evaluation_v2/scores/metrics.json and REPORT.md. Seven frames from exam04/exam05, provisional unreviewed and non-blinded references, historical RF-derived input grid.",
+    "timings": "Local saved benchmark. clarius_annotations/glszm_comparison/metrics.json and REPORT.md. Seven saved frames, identical MedSAM parents, eight gray levels, q0.985, GLSZM step (8,2). Single-run CPU extraction, clustering and refinement timings.",
+    "export": "MATLAB export audit. clarius_annotations/matlab_env_gamma08/manifest.json and liver_env_gamma08_v2/validation.json. 157 full-frame images, 1418 by 853. Image-processing export agreement is separate from mask agreement.",
+    "pi": "User project update on 12 November 2026. PI is redoing all segmentations. Expert-reference evaluation remains planned."
+  }
+}
