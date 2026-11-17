@@ -1,5 +1,10 @@
 # SSIM evaluation against reference segmentations
 
+The current 98-image comparison uses supplied PhD-student-verified contours:
+see [verified evaluation and results](VERIFIED_EVALUATION.md). It uses a fixed
+full-image prompt and clean MATLAB env_gamma08 inputs. The seven-frame study
+below is historical and uses a different protocol and provisional references.
+
 **Revision 2 supersedes the rejected first references and their scores.** Use
 `clarius_annotations/ssim_reference_evaluation_v2/`. The v1 folder is retained
 only as an audit record.
@@ -8,7 +13,7 @@ Every method is scored against the same reference mask for each image. This
 answers agreement with that reference, not similarity between the two methods
 and not similarity between an ultrasound image and a binary mask.
 
-## Current exploratory references
+## Historical exploratory references
 
 The revised exam05 frame 001 anchor approximately traces the user's red outline
 from the conversation image. Its inner vessel contour is separately AI-authored.

@@ -105,9 +105,10 @@ For the 1418 × 853 manual annotation set, clean model inputs, red-outline
 conversion and independent review, see [manual annotation workflow](ANNOTATION.md).
 
 For SSIM, Dice, and IoU against shared per-image references, see
-[reference-mask evaluation](EVALUATION.md). The current seven-image SSIM results
-use explicitly provisional AI-drawn references; they require PI/expert review
-before being treated as anatomical ground truth.
+[reference-mask evaluation](EVALUATION.md). The
+[98-image verified-reference comparison](VERIFIED_EVALUATION.md) now evaluates
+six methods on clean MATLAB inputs with a fixed full-image prompt. The earlier
+seven-image study used provisional AI-drawn references and remains historical.
 
 ```powershell
 python -m unittest discover -s tests -p "test_clarius_*.py" -v
@@ -115,6 +116,6 @@ python -m unittest discover -s tests -p "test_clarius_*.py" -v
 
 Tests compare GLCM features with scikit-image and exercise automatic recovery across source labels, dark-cavity preservation, rejection of narrow lower lobes, seed scoring, reversed target position, mask containment, source-view switching, caching, save/reload, and overlay proportions.
 
-Local evaluation includes saved exam04/exam05 frames with both source methods and additional exam05 frames processed using the existing box prompt and the actual CUDA checkpoint. No tissue selections or correction inputs are supplied. Comparisons are qualitative; there are no expert ground-truth masks, so these checks do not establish anatomical accuracy.
+Earlier development checks used saved exam04/exam05 frames and the CUDA checkpoint. The current verified-reference test scores 98 images across 33 examination IDs. It exposes frequent incorrect region selection with full-image prompts; texture agreement alone does not reliably localize the liver. PI reference revisions and further evaluation remain in progress.
 
 Per-frame normalization also means brightness statistics are not calibrated across acquisitions. Measurements are in pixels until acquisition geometry and scan conversion are verified.

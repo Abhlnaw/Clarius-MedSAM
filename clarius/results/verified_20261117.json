@@ -1,0 +1,308 @@
+{
+  "date": "2026-11-17",
+  "n_images": 98,
+  "n_examination_ids": 33,
+  "n_image_method_pairs": 588,
+  "prompt_protocol": "fixed full-image box [0,0,1418,853]",
+  "reference_provenance": "PhD-student-verified red contours supplied by the user in final_ground_truths; raster conversion is separately audited",
+  "reference_review_status": "Verified by PhD student according to the user; 021 straight closure explicitly authorized",
+  "ssim_settings": {
+    "data_range": 1,
+    "win_size": 11,
+    "gaussian_weights": true,
+    "sigma": 1.5,
+    "use_sample_covariance": false,
+    "K1": 0.01,
+    "K2": 0.03
+  },
+  "parameters": {
+    "levels": 8,
+    "quantile": 0.985,
+    "glszm_step": [
+      8,
+      2
+    ]
+  },
+  "summary": {
+    "brightness_auto": {
+      "n_images": 98,
+      "ssim": {
+        "n": 98,
+        "mean": 0.64036331403877,
+        "sample_sd": 0.165338321735606,
+        "minimum": 0.31269937693214983,
+        "maximum": 0.9279974515675701
+      },
+      "roi_mean_ssim": {
+        "n": 98,
+        "mean": 0.6086501090826996,
+        "sample_sd": 0.1764761320787724,
+        "minimum": 0.26171880344705617,
+        "maximum": 0.9233223875475959
+      },
+      "dice": {
+        "n": 98,
+        "mean": 0.4764814296356384,
+        "sample_sd": 0.35347027733425374,
+        "minimum": 0,
+        "maximum": 0.9272768081816902
+      },
+      "iou": {
+        "n": 98,
+        "mean": 0.3812795239673902,
+        "sample_sd": 0.30161930679769605,
+        "minimum": 0,
+        "maximum": 0.8644138723335681
+      },
+      "precision": {
+        "n": 98,
+        "mean": 0.40670760427514596,
+        "sample_sd": 0.31833435466612664,
+        "minimum": 0,
+        "maximum": 0.913369749088985
+      },
+      "recall": {
+        "n": 98,
+        "mean": 0.6102800475943706,
+        "sample_sd": 0.4442602483838188,
+        "minimum": 0,
+        "maximum": 0.9978625560226988
+      }
+    },
+    "brightness_glszm": {
+      "n_images": 98,
+      "ssim": {
+        "n": 98,
+        "mean": 0.6987125229719134,
+        "sample_sd": 0.15880303721083114,
+        "minimum": 0.35400484883023375,
+        "maximum": 0.9235241104487187
+      },
+      "roi_mean_ssim": {
+        "n": 98,
+        "mean": 0.6713765796443145,
+        "sample_sd": 0.1692772387142107,
+        "minimum": 0.314021939622495,
+        "maximum": 0.9072150688073679
+      },
+      "dice": {
+        "n": 98,
+        "mean": 0.43338852738117906,
+        "sample_sd": 0.3749214493498802,
+        "minimum": 0,
+        "maximum": 0.9173528939589963
+      },
+      "iou": {
+        "n": 98,
+        "mean": 0.3511244626898516,
+        "sample_sd": 0.31671384789517176,
+        "minimum": 0,
+        "maximum": 0.8473240161455278
+      },
+      "precision": {
+        "n": 98,
+        "mean": 0.4822064307856384,
+        "sample_sd": 0.4166239601292513,
+        "minimum": 0,
+        "maximum": 0.99396639526365
+      },
+      "recall": {
+        "n": 98,
+        "mean": 0.4200058846076661,
+        "sample_sd": 0.38209431051328824,
+        "minimum": 0,
+        "maximum": 0.9942055203018783
+      }
+    },
+    "combined_glcm": {
+      "n_images": 98,
+      "ssim": {
+        "n": 98,
+        "mean": 0.7062664335617551,
+        "sample_sd": 0.1663706047153418,
+        "minimum": 0.36275665489189884,
+        "maximum": 0.9223159812375286
+      },
+      "roi_mean_ssim": {
+        "n": 98,
+        "mean": 0.6803622378602406,
+        "sample_sd": 0.17768261136293872,
+        "minimum": 0.2895909407803386,
+        "maximum": 0.9057149415476043
+      },
+      "dice": {
+        "n": 98,
+        "mean": 0.4565493767095445,
+        "sample_sd": 0.3997385204044932,
+        "minimum": 0,
+        "maximum": 0.9134218955017286
+      },
+      "iou": {
+        "n": 98,
+        "mean": 0.3839899719532291,
+        "sample_sd": 0.34564988470899843,
+        "minimum": 0,
+        "maximum": 0.8406408077986278
+      },
+      "precision": {
+        "n": 98,
+        "mean": 0.47143899882352536,
+        "sample_sd": 0.40900124981299324,
+        "minimum": 0,
+        "maximum": 0.9804907004352987
+      },
+      "recall": {
+        "n": 98,
+        "mean": 0.46678300245120663,
+        "sample_sd": 0.42157842412362395,
+        "minimum": 0,
+        "maximum": 0.9966194157468519
+      }
+    },
+    "glcm": {
+      "n_images": 98,
+      "ssim": {
+        "n": 98,
+        "mean": 0.6768044507296177,
+        "sample_sd": 0.13775952704295985,
+        "minimum": 0.3803990678766741,
+        "maximum": 0.8857421261721373
+      },
+      "roi_mean_ssim": {
+        "n": 98,
+        "mean": 0.6462935230333229,
+        "sample_sd": 0.15117352014106844,
+        "minimum": 0.2974196164755359,
+        "maximum": 0.8736665502310188
+      },
+      "dice": {
+        "n": 98,
+        "mean": 0.3554741410343041,
+        "sample_sd": 0.3607056567620943,
+        "minimum": 0,
+        "maximum": 0.8944976147067121
+      },
+      "iou": {
+        "n": 98,
+        "mean": 0.28076101904842915,
+        "sample_sd": 0.29958484494243137,
+        "minimum": 0,
+        "maximum": 0.809132234001832
+      },
+      "precision": {
+        "n": 98,
+        "mean": 0.3998206570428393,
+        "sample_sd": 0.4064127381713107,
+        "minimum": 0,
+        "maximum": 0.9894097796778446
+      },
+      "recall": {
+        "n": 98,
+        "mean": 0.3707457781774492,
+        "sample_sd": 0.4000272396622018,
+        "minimum": 0,
+        "maximum": 0.9999428608977124
+      }
+    },
+    "glszm": {
+      "n_images": 98,
+      "ssim": {
+        "n": 98,
+        "mean": 0.689478219691908,
+        "sample_sd": 0.12881409026260296,
+        "minimum": 0.39700843016225335,
+        "maximum": 0.8964690840359096
+      },
+      "roi_mean_ssim": {
+        "n": 98,
+        "mean": 0.6622495304157353,
+        "sample_sd": 0.13763496866400285,
+        "minimum": 0.3552412233989365,
+        "maximum": 0.8905737063250558
+      },
+      "dice": {
+        "n": 98,
+        "mean": 0.5391455518846999,
+        "sample_sd": 0.2605038452605148,
+        "minimum": 0,
+        "maximum": 0.8569356008704764
+      },
+      "iou": {
+        "n": 98,
+        "mean": 0.40818598470842704,
+        "sample_sd": 0.22492798520061455,
+        "minimum": 0,
+        "maximum": 0.7496826963756875
+      },
+      "precision": {
+        "n": 98,
+        "mean": 0.5375618151139921,
+        "sample_sd": 0.3092569779071479,
+        "minimum": 0,
+        "maximum": 0.9980631729357722
+      },
+      "recall": {
+        "n": 98,
+        "mean": 0.6400290418207454,
+        "sample_sd": 0.3278597893342189,
+        "minimum": 0,
+        "maximum": 1
+      }
+    },
+    "medsam": {
+      "n_images": 98,
+      "ssim": {
+        "n": 98,
+        "mean": 0.3475207758521364,
+        "sample_sd": 0.08835382384026738,
+        "minimum": 0.1845376126829276,
+        "maximum": 0.6941866113963316
+      },
+      "roi_mean_ssim": {
+        "n": 98,
+        "mean": 0.3056049015230197,
+        "sample_sd": 0.07846307474560273,
+        "minimum": 0.13699042445499587,
+        "maximum": 0.6377794084316866
+      },
+      "dice": {
+        "n": 98,
+        "mean": 0.477139118513908,
+        "sample_sd": 0.0884277673778556,
+        "minimum": 0.2570823810185244,
+        "maximum": 0.7909858954801201
+      },
+      "iou": {
+        "n": 98,
+        "mean": 0.3178554819525257,
+        "sample_sd": 0.07937853521909902,
+        "minimum": 0.14750116598669644,
+        "maximum": 0.6542404199612163
+      },
+      "precision": {
+        "n": 98,
+        "mean": 0.3182302996983153,
+        "sample_sd": 0.0809853885212174,
+        "minimum": 0.14750116598669644,
+        "maximum": 0.6880388097518771
+      },
+      "recall": {
+        "n": 98,
+        "mean": 0.9991458279501957,
+        "sample_sd": 0.007084834166923115,
+        "minimum": 0.9301601299605476,
+        "maximum": 1
+      }
+    }
+  },
+  "zero_overlap_images": {
+    "brightness_auto": 27,
+    "brightness_glszm": 36,
+    "combined_glcm": 38,
+    "glcm": 43,
+    "glszm": 12,
+    "medsam": 0
+  },
+  "algorithm_exceptions": 0,
+  "note": "Reference-mask agreement. Full-frame SSIM includes shared background; ROI mean is a custom SSIM-map aggregation. Native grids, no resizing. Frame-level SD is not uncertainty across independent patients."
+}
