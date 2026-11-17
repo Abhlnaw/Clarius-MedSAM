@@ -118,7 +118,7 @@ def evaluate_manifest(path, output):
         roi = f"{stats['roi_mean_ssim']['mean']:.4f}" if stats['roi_mean_ssim']['mean'] is not None else 'N/A'
         lines.append(f"| {name} | {stats['ssim']['mean']:.4f} +/- {sd} | {roi} | {stats['dice']['mean']:.4f} | {stats['iou']['mean']:.4f} |")
     lines += ['', 'Full-frame SSIM can look high because both masks share a large background.',
-        'Dice/IoU measure foreground overlap. AI-drawn references require expert review before anatomical-accuracy claims.',
+        'Dice/IoU measure foreground overlap. Interpret scores using the recorded reference provenance and review status.',
         'These frames may share an examination and are not independent patient samples.']
     (output/'REPORT.md').write_text('\n'.join(lines)+'\n', encoding='utf-8')
     return result
