@@ -98,6 +98,9 @@ Mask and feature arrays retain their native sample grid. Resizing the PNG is for
 
 ## Validation
 
+For the small learned liver-box model, exam-disjoint evaluation and optional
+automatic prompts in the viewer, see [liver localization](LOCALIZATION.md).
+
 For the selected **`env_gamma08`** rendering and full-frame contrast exports,
 see [Clarius contrast exploration](CONTRAST.md).
 

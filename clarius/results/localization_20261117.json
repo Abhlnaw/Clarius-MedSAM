@@ -1,0 +1,160 @@
+{
+  "n_images": 98,
+  "n_exams": 33,
+  "n_scores": 686,
+  "summary": [
+    {
+      "method": "full_image",
+      "label": "Full-image MedSAM",
+      "n": 98,
+      "ssim": 0.3475207758521364,
+      "roi_mean_ssim": 0.3056021925886503,
+      "dice": 0.477139118513908,
+      "iou": 0.3178554819525257,
+      "precision": 0.3182302996983153,
+      "recall": 0.9991458279501957,
+      "zero_overlap_images": 0
+    },
+    {
+      "method": "training_mean",
+      "label": "Training-mean box + MedSAM",
+      "n": 98,
+      "ssim": 0.8408709029697111,
+      "roi_mean_ssim": 0.82535337746834,
+      "dice": 0.7916921957444666,
+      "iou": 0.6693293394264017,
+      "precision": 0.7182400689577488,
+      "recall": 0.9084014832533839,
+      "zero_overlap_images": 0
+    },
+    {
+      "method": "predicted",
+      "label": "CNN box + MedSAM",
+      "n": 98,
+      "ssim": 0.8512811867621394,
+      "roi_mean_ssim": 0.8366923710138087,
+      "dice": 0.8120503409706078,
+      "iou": 0.6932667225116599,
+      "precision": 0.7208969996163058,
+      "recall": 0.9547212822304663,
+      "zero_overlap_images": 0
+    },
+    {
+      "method": "oracle",
+      "label": "Reference box + MedSAM (assisted)",
+      "n": 98,
+      "ssim": 0.8746031638940089,
+      "roi_mean_ssim": 0.8617467664597143,
+      "dice": 0.851047130000428,
+      "iou": 0.7438287350955365,
+      "precision": 0.7500931690566609,
+      "recall": 0.9893084485478424,
+      "zero_overlap_images": 0
+    },
+    {
+      "method": "full_image_combined",
+      "label": "Full-image + Combined GLCM",
+      "n": 98,
+      "ssim": 0.7062664335617551,
+      "roi_mean_ssim": 0.6804606216321742,
+      "dice": 0.4565493767095445,
+      "iou": 0.3839899719532291,
+      "precision": 0.47143899882352536,
+      "recall": 0.46678300245120663,
+      "zero_overlap_images": 38
+    },
+    {
+      "method": "training_mean_combined",
+      "label": "Mean box + MedSAM + Combined GLCM",
+      "n": 98,
+      "ssim": 0.8346530838096536,
+      "roi_mean_ssim": 0.816479538545275,
+      "dice": 0.6960234331743141,
+      "iou": 0.5601758168630735,
+      "precision": 0.9098925374213395,
+      "recall": 0.590098774519969,
+      "zero_overlap_images": 2
+    },
+    {
+      "method": "predicted_combined",
+      "label": "CNN box + MedSAM + Combined GLCM",
+      "n": 98,
+      "ssim": 0.8403657192158646,
+      "roi_mean_ssim": 0.8232132794818617,
+      "dice": 0.7106590434740199,
+      "iou": 0.5810271995892875,
+      "precision": 0.9048800105096628,
+      "recall": 0.6170185169649057,
+      "zero_overlap_images": 1
+    }
+  ],
+  "box_summary": {
+    "predicted": {
+      "raw_box_iou": 0.8136647735468675,
+      "prompt_box_iou": 0.7772105001538391,
+      "reference_pixel_coverage": 0.9873296152198153
+    },
+    "training_mean": {
+      "raw_box_iou": 0.7456192854833268,
+      "prompt_box_iou": 0.7369894860237906,
+      "reference_pixel_coverage": 0.9670232622373672
+    }
+  },
+  "paired": [
+    {
+      "method": "predicted",
+      "baseline": "full_image",
+      "mean_dice_difference": 0.3349112224566998,
+      "improved_images": 96,
+      "worse_images": 2,
+      "tied_images": 0
+    },
+    {
+      "method": "predicted",
+      "baseline": "training_mean",
+      "mean_dice_difference": 0.020358145226141166,
+      "improved_images": 53,
+      "worse_images": 45,
+      "tied_images": 0
+    },
+    {
+      "method": "predicted_combined",
+      "baseline": "full_image_combined",
+      "mean_dice_difference": 0.2541096667644755,
+      "improved_images": 65,
+      "worse_images": 32,
+      "tied_images": 1
+    },
+    {
+      "method": "predicted_combined",
+      "baseline": "training_mean_combined",
+      "mean_dice_difference": 0.014635610299706005,
+      "improved_images": 62,
+      "worse_images": 35,
+      "tied_images": 1
+    },
+    {
+      "method": "predicted_combined",
+      "baseline": "predicted",
+      "mean_dice_difference": -0.1013912974965877,
+      "improved_images": 28,
+      "worse_images": 70,
+      "tied_images": 0
+    }
+  ],
+  "refinement_exceptions": {
+    "predicted_combined": 0,
+    "training_mean_combined": 0
+  },
+  "model_parameters": 423604,
+  "training_seconds": 18.363834500007215,
+  "best_epochs": [
+    36,
+    36,
+    43,
+    101,
+    44
+  ],
+  "exam_disjoint": true,
+  "inputs_unchanged": true
+}
