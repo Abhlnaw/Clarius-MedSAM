@@ -12,6 +12,7 @@
 data/
 work_dir/
 clarius_annotations/
+final_ground_truths/
 exported_images/
 *.rf
 *.raw
