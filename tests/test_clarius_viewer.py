@@ -23,6 +23,26 @@ class StubModel:
 
 
 class ViewerTests(unittest.TestCase):
+    def test_localizer_prompts_only_new_frames_and_preserves_provenance(self):
+        mask = self.viewer.regions[0][1].copy()
+        def select(viewer, press, release):
+            viewer.regions.append((list(map(float,[press.xdata, press.ydata, release.xdata, release.ydata])),mask))
+            viewer._dirty = True
+        output = self.root / 'auto_output'
+        with patch('clarius_localizer.predict_box',return_value=np.array([10,5,50,35])) as predict, \
+             patch.object(Viewer,'select',select):
+            viewer=Viewer(StubModel(),'cpu',[self.path],output,localizer=object(),localizer_info={'checkpoint_sha256':'example'})
+            self.addCleanup(plt.close,viewer.fig)
+            self.assertEqual(predict.call_count,1)
+            self.assertEqual(len(viewer.regions),1)
+            viewer.save();viewer.load()
+            self.assertEqual(predict.call_count,1)
+            self.assertEqual(viewer.auto_boxes[0]['checkpoint_sha256'],'example')
+            metadata=json.loads((output/'frame.png.regions.json').read_text())
+            self.assertEqual(metadata['regions'][0]['box_prompt']['source'],'learned_liver_localizer')
+            viewer.undo()
+            self.assertFalse(viewer.auto_boxes)
+
     def test_glszm_views_share_maps_and_save_automatic_gate(self):
         import clarius_texture
         viewer=self.viewer

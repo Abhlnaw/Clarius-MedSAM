@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import time
 from collections import OrderedDict
+from types import SimpleNamespace
 
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, CheckButtons, RadioButtons, RectangleSelector
@@ -40,7 +41,8 @@ def load_rgb(path):
 
 class Viewer:
     def __init__(self, model, device, paths, output, glcm_levels=8, auto_source="combined",
-                 auto_correlation_quantile=DEFAULT_CORRELATION_QUANTILE, glszm_step=(8, 2)):
+                 auto_correlation_quantile=DEFAULT_CORRELATION_QUANTILE, glszm_step=(8, 2),
+                 localizer=None, localizer_info=None):
         self.model, self.device = model, device
         self.paths, self.output = paths, output
         self.index = 0
@@ -49,6 +51,7 @@ class Viewer:
         if len(glszm_step) != 2 or any(not isinstance(n, (int, np.integer)) or n < 1 for n in glszm_step):
             raise ValueError("GLSZM step must contain two positive integers")
         self.glszm_step = tuple(glszm_step)
+        self.localizer, self.localizer_info = localizer, localizer_info
         self.embedding_cache = OrderedDict()
         self._busy = False
         self.fig, self.ax = plt.subplots(figsize=(11, 8))
@@ -99,6 +102,7 @@ class Viewer:
         self.regions = []
         self.texture = None
         self.refinements = {}
+        self.auto_boxes = {}
         saved_masks = self.output / f"{self.paths[self.index].name}.regions.npz"
         saved_json = self.output / f"{self.paths[self.index].name}.regions.json"
         if saved_masks.exists() or saved_json.exists():
@@ -112,6 +116,8 @@ class Viewer:
                 self.regions = [(record["box_xyxy"], mask.copy())
                                 for record, mask in zip(metadata["regions"], masks)]
                 for i, record in enumerate(metadata["regions"]):
+                    if "box_prompt" in record:
+                        self.auto_boxes[i] = record["box_prompt"]
                     if "texture" in record:
                         self.refinements[i] = dict(record["texture"])
                         for key in ARRAY_KEYS:
@@ -130,6 +136,15 @@ class Viewer:
                                           spancoords="pixels", interactive=False)
         self.status.set_text("Drag to segment. Save writes masks; navigation and closing also save.")
         self.redraw()
+        if self.localizer is not None and not saved_masks.exists() and not saved_json.exists():
+            from clarius_localizer import predict_box
+            box = predict_box(self.localizer, self.paths[self.index], self.device)
+            self.select(SimpleNamespace(xdata=box[0], ydata=box[1]),
+                        SimpleNamespace(xdata=box[2], ydata=box[3]))
+            if self.regions:
+                self.auto_boxes[len(self.regions)-1] = dict(source="learned_liver_localizer", **(self.localizer_info or {}))
+                self.status.set_text("Predicted liver box applied. Review the mask; Split latest region tests texture refinement.")
+                self.fig.canvas.draw_idle()
 
     @torch.inference_mode()
     def select(self, press, release):
@@ -194,6 +209,7 @@ class Viewer:
             self.regions.pop()
             self.texture_cache.clear()
             self.refinements.pop(len(self.regions), None)
+            self.auto_boxes.pop(len(self.regions), None)
             self.texture = None
             self._dirty = True
             self.status.set_text("Last region removed. Save to update the annotation bundle.")
@@ -222,6 +238,8 @@ class Viewer:
             if i in self.refinements:
                 records[-1]["texture"] = {key: value for key, value in self.refinements[i].items()
                                            if key not in ARRAY_KEYS}
+            if i in self.auto_boxes:
+                records[-1]["box_prompt"] = self.auto_boxes[i]
         # Match the full image's presentation in the axes, not the RF sample
         # grid's aspect ratio. Use 2x canvas resolution for a sharper PNG.
         # Never resample annotation arrays or crop the export to a zoomed view.
@@ -369,6 +387,8 @@ def main():
     parser.add_argument("-i", "--input", type=Path, required=True, help="Image or folder of exported frames")
     parser.add_argument("--checkpoint", type=Path, default=Path("medsam_vit_b.pth"))
     parser.add_argument("--device", default="cuda:0" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--localizer-checkpoint", type=Path,
+                        help="Optional learned liver-box checkpoint; automatically prompt new, unannotated frames")
     parser.add_argument("-o", "--output", type=Path, default=Path("clarius_annotations"))
     parser.add_argument("--glcm-levels", type=int, choices=(8, 16, 32, 64), default=8)
     parser.add_argument("--auto-source", choices=("combined", "glcm", "glszm", "combined_glszm"), default="combined",
@@ -386,8 +406,17 @@ def main():
     if not paths or any(not p.is_file() for p in paths):
         parser.error("No input images found")
     model = sam_model_registry["vit_b"](checkpoint=str(args.checkpoint)).to(args.device).eval()
+    localizer, localizer_info = None, None
+    if args.localizer_checkpoint:
+        import hashlib
+        from clarius_localizer import load_localizer
+        localizer, saved_localizer = load_localizer(args.localizer_checkpoint, args.device)
+        localizer_info = dict(checkpoint=str(args.localizer_checkpoint.resolve()),
+            checkpoint_sha256=hashlib.sha256(args.localizer_checkpoint.read_bytes()).hexdigest(),
+            padding_fraction=.03, training_purpose=saved_localizer.get("purpose", "cross-validation fold model"))
     viewer = Viewer(model, args.device, paths, args.output, glcm_levels=args.glcm_levels, auto_source=args.auto_source,
-                    auto_correlation_quantile=args.auto_correlation_quantile, glszm_step=args.glszm_step)
+                    auto_correlation_quantile=args.auto_correlation_quantile, glszm_step=args.glszm_step,
+                    localizer=localizer, localizer_info=localizer_info)
     plt.show()
 
 
