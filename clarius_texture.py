@@ -1,4 +1,9 @@
-"""Group local GLCM features within a MedSAM candidate region."""
+"""Legacy pixel-space appearance grouping within a MedSAM candidate region.
+
+These windows/offsets have no millimeter calibration. The current calibration
+validation path is MATLAB clarius/batch_glcm_envelope_bmode.m; do not interpret
+this older grouping pipeline as a physically isotropic texture measurement.
+"""
 
 import numpy as np
 from scipy.ndimage import label as connected_components, uniform_filter

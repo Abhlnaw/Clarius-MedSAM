@@ -2,6 +2,9 @@
 
 Histograms are streamed one gray-level pair at a time using summed-area tables;
 no height x width x levels x levels tensor is allocated.
+
+This legacy API uses image pixels without physical calibration. The MATLAB
+physical-GLCM workflow resamples source amplitudes in millimeters first.
 """
 
 import numpy as np

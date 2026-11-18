@@ -1,5 +1,11 @@
 # Clarius ultrasound workflow
 
+**Current focus: physically calibrated GLCM in MATLAB.** Start with
+[envelope/B-mode GLCM](PHYSICAL_GLCM.md). It uses source RF/YAML calibration,
+anti-aliased isotropic resampling, two features and directional parameter
+comparisons. The interactive Python texture workflow below is retained as a
+legacy pixel-space prototype; its offsets are not millimeter-calibrated.
+
 ## Run
 
 Set the exam directory in `clarius/runme2_export.m`. MATLAB reads the Clarius

@@ -1,5 +1,10 @@
 # Local GLCM texture refinement
 
+The current calibration/verification path is
+[physical envelope/B-mode GLCM in MATLAB](PHYSICAL_GLCM.md). The implementation
+below is the historical pixel-space viewer pipeline. Correct pair-count
+formulas alone do not validate its physical spatial scale.
+
 The default **Low / High variation** mode now automatically refines a Combined
 or GLCM proposal using `clarius_auto.py`. The GLCM math below describes the source
 features. See [the current automatic workflow](README.md) for controls and output.

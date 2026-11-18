@@ -1,0 +1,41 @@
+{
+  "captures": 4,
+  "summary_rows": 384,
+  "parameter_rows": 96,
+  "matlab_checks": 31,
+  "byte_preparation_tests": 3,
+  "inputs_unchanged": true,
+  "features": [
+    "Contrast",
+    "Entropy"
+  ],
+  "direction_aggregation": "NONE",
+  "configurations": {
+    "levels": [
+      8,
+      16,
+      32,
+      64
+    ],
+    "window_pulse_lengths": [
+      5,
+      10,
+      20
+    ],
+    "isotropic_spacing_mm": 0.13,
+    "cycles_per_pulse_assumed": 2
+  },
+  "source_script_sha256": "E5A1AB8653390369C77B424B5E6ACD2D8DDA20DCCD0A66A9D873339394C18C9C",
+  "matlab_validation": {
+    "tests_passed": 31,
+    "max_feature_reference_error": 0,
+    "filtered_out_of_band_std": 1.9159427201669187e-7,
+    "unfiltered_out_of_band_std": 0.7058936863564509,
+    "features": [
+      "Contrast",
+      "Entropy"
+    ],
+    "matlab_version": "26.2.0.3386108 (R2026b)"
+  },
+  "claim": "Technical validation and parameter sensitivity; no optimum or segmentation accuracy established"
+}
